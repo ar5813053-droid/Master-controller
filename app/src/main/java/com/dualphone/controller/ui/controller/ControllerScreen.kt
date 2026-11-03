@@ -137,7 +137,7 @@ fun ControllerScreen(
                         Text("Disconnect", color = AccentBlue)
                     }
                 } else {
-                    Text("Pairing string (IP:PORT:TOKEN)", color = TextSecondary, fontSize = 11.sp)
+                    Text("Wi-Fi: IP:PORT:TOKEN  ·  BT: MAC:TOKEN", color = TextSecondary, fontSize = 11.sp)
                     BasicTextField(
                         value = pairingInput,
                         onValueChange = { pairingInput = it },

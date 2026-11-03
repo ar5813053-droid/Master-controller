@@ -8,16 +8,14 @@ import androidx.lifecycle.viewModelScope
 import com.dualphone.controller.DualPhoneApp
 import com.dualphone.controller.core.GamepadState
 import com.dualphone.controller.transport.ConnectionDiagnostics
+import com.dualphone.controller.transport.TransportKind
 import com.dualphone.controller.transport.wifi.TcpUdpInputTransport
-import com.dualphone.controller.transport.wifi.WiFiDirectManager
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
 import com.google.zxing.qrcode.QRCodeWriter
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 data class GamingUiState(
@@ -28,37 +26,56 @@ data class GamingUiState(
     val pairingString: String = "",
     val error: String? = null,
     val wifiDirectAvailable: Boolean = false,
-    val wifiDirectStatus: String = ""
+    val wifiDirectStatus: String = "",
+    val bluetoothAvailable: Boolean = false,
+    val bluetoothToken: String = "",
+    val activeTransport: TransportKind = TransportKind.NONE
 )
 
 class GamingViewModel(application: Application) : AndroidViewModel(application) {
     private val app = application as DualPhoneApp
-    private val transport: TcpUdpInputTransport = app.transport
-    private val wifiDirect: WiFiDirectManager = app.wifiDirectManager
+    private val connectionManager = app.connectionManager
+    private val wifiTransport = app.wifiTransport
+    private val btTransport = app.bluetoothTransport
+    private val wifiDirect = app.wifiDirectManager
+    private val backend = app.inputBackend
 
     private val _uiState = MutableStateFlow(GamingUiState())
     val uiState: StateFlow<GamingUiState> = _uiState.asStateFlow()
 
-    val diagnostics = transport.diagnostics
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ConnectionDiagnostics())
-
     init {
         wifiDirect.initialize()
+        backend.setActive(true)
+        _uiState.value = _uiState.value.copy(
+            bluetoothAvailable = btTransport.isBluetoothAvailable()
+        )
+
         viewModelScope.launch {
-            transport.diagnostics.collect { diag ->
-                _uiState.value = _uiState.value.copy(
-                    diagnostics = diag,
-                    isListening = diag.statusMessage.contains("Listening") || diag.isConnected,
-                    pairingString = buildPairingString(diag)
-                )
-                if (diag.localIp.isNotBlank() && diag.pairingTokenDisplay.isNotBlank()) {
-                    refreshQr(diag)
+            wifiTransport.diagnostics.collect { diag ->
+                if (connectionManager.activeTransport.value != TransportKind.BLUETOOTH_RFCOMM) {
+                    applyDiag(diag)
                 }
             }
         }
         viewModelScope.launch {
-            transport.receiveState().collect { state ->
+            btTransport.diagnostics.collect { diag ->
+                if (connectionManager.activeTransport.value == TransportKind.BLUETOOTH_RFCOMM) {
+                    applyDiag(diag)
+                    _uiState.value = _uiState.value.copy(
+                        bluetoothToken = diag.pairingTokenDisplay
+                    )
+                }
+            }
+        }
+        viewModelScope.launch {
+            connectionManager.incomingState.collect { state ->
                 _uiState.value = _uiState.value.copy(lastInput = state)
+                backend.inject(state)
+            }
+        }
+        viewModelScope.launch {
+            connectionManager.activeTransport.collect { kind ->
+                _uiState.value = _uiState.value.copy(activeTransport = kind)
             }
         }
         viewModelScope.launch {
@@ -71,17 +88,35 @@ class GamingViewModel(application: Application) : AndroidViewModel(application) 
                 _uiState.value = _uiState.value.copy(wifiDirectStatus = msg)
             }
         }
+        viewModelScope.launch {
+            backend.latest.collect { state ->
+                // mirror for UI
+                if (connectionManager.activeTransport.value != TransportKind.NONE) {
+                    _uiState.value = _uiState.value.copy(lastInput = state)
+                }
+            }
+        }
     }
 
-    fun startReceiver() {
+    private fun applyDiag(diag: ConnectionDiagnostics) {
+        _uiState.value = _uiState.value.copy(
+            diagnostics = diag,
+            isListening = diag.statusMessage.contains("Listening", ignoreCase = true) ||
+                    diag.statusMessage.contains("listening", ignoreCase = true) ||
+                    diag.isConnected,
+            pairingString = buildPairingString(diag)
+        )
+        if (diag.localIp.isNotBlank() && diag.pairingTokenDisplay.isNotBlank()) {
+            refreshQr(diag)
+        }
+    }
+
+    fun startWifiReceiver() {
         viewModelScope.launch {
-            val result = transport.startReceiver(
-                TcpUdpInputTransport.DEFAULT_TCP_PORT,
-                TcpUdpInputTransport.DEFAULT_UDP_PORT
-            )
+            val result = connectionManager.startWifiReceiver()
             if (result.isFailure) {
                 _uiState.value = _uiState.value.copy(
-                    error = result.exceptionOrNull()?.message ?: "Failed to start receiver"
+                    error = result.exceptionOrNull()?.message ?: "Failed to start Wi-Fi receiver"
                 )
             } else {
                 _uiState.value = _uiState.value.copy(error = null, isListening = true)
@@ -89,10 +124,31 @@ class GamingViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun startBluetoothReceiver() {
+        viewModelScope.launch {
+            val result = connectionManager.startBluetoothReceiver()
+            if (result.isFailure) {
+                _uiState.value = _uiState.value.copy(
+                    error = result.exceptionOrNull()?.message ?: "Failed to start Bluetooth"
+                )
+            } else {
+                _uiState.value = _uiState.value.copy(
+                    error = null,
+                    isListening = true,
+                    bluetoothToken = btTransport.diagnostics.value.pairingTokenDisplay
+                )
+            }
+        }
+    }
+
     fun stopReceiver() {
         viewModelScope.launch {
-            transport.disconnect()
-            _uiState.value = _uiState.value.copy(isListening = false, lastInput = GamepadState.EMPTY)
+            connectionManager.disconnect()
+            backend.releaseAll()
+            _uiState.value = _uiState.value.copy(
+                isListening = false,
+                lastInput = GamepadState.EMPTY
+            )
         }
     }
 
@@ -106,7 +162,6 @@ class GamingViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun buildPairingString(diag: ConnectionDiagnostics): String {
         if (diag.localIp.isBlank() || diag.pairingTokenDisplay.isBlank()) return ""
-        // Format consumed by controller: host:tcpPort:tokenHex
         return "${diag.localIp}:${diag.tcpPort}:${diag.pairingTokenDisplay}"
     }
 
@@ -126,10 +181,5 @@ class GamingViewModel(application: Application) : AndroidViewModel(application) 
             _uiState.value = _uiState.value.copy(qrBitmap = bmp, pairingString = content)
         } catch (_: Exception) {
         }
-    }
-
-    override fun onCleared() {
-        // Do not shut down global transport here – user may navigate away briefly
-        super.onCleared()
     }
 }

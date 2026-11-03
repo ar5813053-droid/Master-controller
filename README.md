@@ -1,79 +1,66 @@
 # DualPhone Controller
 
-**Milestone 2 – Wi-Fi Connectivity & Low-Latency Input Transport**
+**Full release – Wi-Fi + Wi-Fi Direct + Bluetooth RFCOMM**
 
-One Android application installed on two phones:
+Personal-use wireless gamepad: install the same APK on two Android phones.
 
-- **Controller Mode** – landscape virtual gamepad that streams input over Wi-Fi
-- **Gaming Mode** – receiver that authenticates a session and accepts UDP input packets
+| Phone | Mode |
+|-------|------|
+| A | **Controller Mode** – landscape virtual gamepad, streams input |
+| B | **Gaming Mode** – authenticates session, receives binary input |
 
-No internet or cloud server is required.
+No internet, accounts, ads, or cloud.
 
-## Milestone 2 features
+## Connection methods
 
-- TCP session establishment + pairing token authentication
-- UDP live gamepad state at up to ~120 Hz
-- Versioned binary packet protocol (not JSON)
+### 1. Wi-Fi Hotspot / Existing LAN
+1. Gaming phone → **Gaming Mode** → **Wi-Fi** (Start).
+2. Note pairing string / QR: `IP:TCP_PORT:TOKEN`.
+3. Controller on same network (or connected to gaming phone’s hotspot).
+4. Controller Mode → **Connect** → enter pairing string.
+
+Local IP is discovered at runtime (no fixed gateway assumption).
+
+### 2. Wi-Fi Direct
+- Gaming Mode → Discover peers when hardware supports it.
+- After group formation, use group-owner IP with the same TCP/UDP ports and token.
+- If P2P is unavailable, use hotspot/LAN instead.
+
+### 3. Bluetooth RFCOMM (app-to-app)
+- Service UUID: `a1b2c3d4-e5f6-7890-abcd-ef1234567890`
+- Gaming: **Bluetooth** start → note BT pairing token.
+- Bond devices in system Bluetooth settings first.
+- Controller: enter `BT:AA:BB:CC:DD:EE:FF:TOKEN` (or use bonded list + token).
+- Length-prefixed binary frames on the RFCOMM stream (same packet layout as Wi-Fi).
+
+**Not Bluetooth HID.** Both phones must run DualPhone Controller.
+
+## Input protocol
+
+46-byte little-endian binary frames (not JSON):
+
+version · type · sessionId · sequence · timestamp · Lx Ly Rx Ry · bitmask · LT RT
+
+- Target ~120 Hz over Wi-Fi UDP; ~60 Hz over Bluetooth RFCOMM
+- Latest-state joysticks (no stale queue buildup)
 - Session-bound packets; foreign sessions rejected
-- RELEASE_ALL on disconnect (no stuck buttons)
-- Wi-Fi LAN / hotspot workflow
-- Wi-Fi Direct discovery & group formation helpers
-- Pairing QR code + manual IP:PORT:TOKEN entry
-- Live diagnostics (packets, loss estimate, update rate)
-- All Milestone 1 UI, layout editor, settings, and tests preserved
+- `RELEASE_ALL` on disconnect (no stuck buttons)
 
-## Quick two-phone test (hotspot / same Wi-Fi)
+## Game input backend – honest limitation
 
-1. **Gaming phone**
-   - Open **Gaming Mode** → **Start Receiver**
-   - Note the pairing string (or scan the QR): `IP:TCP_PORT:TOKEN`
-   - Optionally enable a Wi-Fi hotspot and connect the controller phone to it
+Ordinary Android apps **cannot** inject synthetic gamepad HID events into other games without system privileges, a custom ROM, or a carefully designed AccessibilityService.
 
-2. **Controller phone**
-   - Open **Controller Mode** → **Connect**
-   - Enter the pairing string → **Connect**
-   - Operate sticks/buttons; Gaming phone diagnostics should show packets and live input
+This release ships:
 
-3. **Disconnect**
-   - Use **Disconnect** on either side
-   - Receiver applies RELEASE_ALL and is ready for a new session
+- **LiveInputTesterBackend** – receiver UI shows live sticks/buttons/triggers
+- Clean `GameInputBackend` interface for a future supported injection path
 
-### Wi-Fi Direct
+It does **not** claim universal control of third-party games.
 
-- On Gaming Mode, if hardware supports it, use **Discover peers**
-- After the P2P group forms, use the group-owner IP with the same TCP/UDP ports and pairing token
-- If Wi-Fi Direct is unavailable, hotspot/LAN still works
+## Diagnostics
 
-### Existing Wi-Fi network
-
-- Both phones on the same LAN
-- Gaming phone shows its local IP in the pairing string
-- Controller connects to that IP (no fixed gateway assumption)
-
-## Protocol (summary)
-
-| Field | Size | Notes |
-|-------|------|--------|
-| version | 1 | currently `1` |
-| type | 1 | INPUT_STATE, RELEASE_ALL, HEARTBEAT, AUTH_* |
-| sessionId | 4 | bound after TCP auth |
-| sequence | 4 | monotonic |
-| timestampMs | 8 | wall clock |
-| sticks / triggers | f32 x 6 | normalized |
-| buttons | u32 bitmask | |
-
-Total INPUT_STATE frame: **46 bytes**.
-
-## Architecture
-
-```
-transport/
-  protocol/   BinaryPacketProtocol, SessionAuth
-  wifi/       TcpUdpInputTransport, WiFiDirectManager, NetworkUtils
-  ConnectionDiagnostics
-```
-
-Interfaces from Milestone 1 remain the boundary for future Bluetooth RFCOMM.
+Packets sent/received, loss estimate, update rate, connection type, session id.  
+RTT is shown only when measured; otherwise “Not measured (one-way only)”.
 
 ## Build
 
@@ -82,22 +69,37 @@ Interfaces from Milestone 1 remain the boundary for future Bluetooth RFCOMM.
 ./gradlew assembleDebug
 ```
 
-GitHub Actions uploads artifact **DualPhoneController-Milestone2-APK**.
+GitHub Actions artifact: **DualPhoneController-FullRelease-APK**
 
-## Tests
+## Automated tests
 
-- Binary encode/decode, invalid rejection, NaN rejection
+- Binary protocol encode/decode, NaN/version rejection
 - Session auth accept/reject
-- Sequence / loss estimate logic
-- In-process TCP+UDP loopback
-- Existing M1 joystick, button, layout tests
+- Sequence / loss estimate
+- TCP+UDP loopback
+- Bluetooth length-prefix framing
+- Joystick deadzone, multi-button state, layout serialization
+- Transport exclusive switching logic
 
-## Not in this milestone
+## Manual two-phone checklist
 
-- Bluetooth RFCOMM
-- Injecting input into third-party games (HID / accessibility backend)
-- Claimed one-way latency numbers without device measurement
+Devices (example): POCO X3 Pro (controller), Redmi A2 (receiver).
+
+- [ ] Wi-Fi same LAN: connect, dual sticks + buttons, disconnect → RELEASE_ALL
+- [ ] Gaming phone hotspot: controller joins hotspot, pairs via QR/string
+- [ ] Wi-Fi Direct: discover, group, TCP/UDP (if hardware allows)
+- [ ] Bluetooth: bond in system settings, BT receiver + `BT:MAC:TOKEN`
+- [ ] Switch transports (stop previous before starting another)
+- [ ] Landscape controller + layout editor save/load
+- [ ] App background/foreground while connected
+- [ ] Reconnect with new token after stop
+
+Physical radio tests require real devices; unit/loopback tests run in CI.
 
 ## Version
 
-`1.0.0-milestone2` (versionCode 2)
+`1.0.0-full` (versionCode 3)
+
+## Architecture packages
+
+`core` · `input` · `transport` (wifi, bluetooth, protocol) · `receiver` · `hid` · `database` · `preferences` · `ui.*`

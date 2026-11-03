@@ -14,6 +14,8 @@ import com.dualphone.controller.core.ControllerButton
 import com.dualphone.controller.core.ControllerLayout
 import com.dualphone.controller.core.GamepadState
 import com.dualphone.controller.input.GamepadInputManager
+import com.dualphone.controller.transport.TransportKind
+import com.dualphone.controller.transport.bluetooth.BluetoothRfcommTransport
 import com.dualphone.controller.transport.wifi.TcpUdpInputTransport
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -29,13 +31,18 @@ data class ControllerConnectionUi(
     val packetsSent: Long = 0,
     val updateRateHz: Float = 0f,
     val estimatedRttMs: Float? = null,
-    val transportName: String = "None"
+    val transportName: String = "None",
+    val transportKind: TransportKind = TransportKind.NONE,
+    val bondedDevices: List<BluetoothRfcommTransport.BtDeviceInfo> = emptyList()
 )
 
 class ControllerViewModel(application: Application) : AndroidViewModel(application) {
-    private val settingsRepo = (application as DualPhoneApp).settingsRepository
-    private val layoutRepo = (application as DualPhoneApp).layoutRepository
-    private val transport: TcpUdpInputTransport = (application as DualPhoneApp).transport
+    private val app = application as DualPhoneApp
+    private val settingsRepo = app.settingsRepository
+    private val layoutRepo = app.layoutRepository
+    private val connectionManager = app.connectionManager
+    private val wifiTransport = app.wifiTransport
+    private val btTransport = app.bluetoothTransport
 
     private val inputManager = GamepadInputManager(
         deadzone = { currentSettings.joystickDeadzone },
@@ -70,53 +77,132 @@ class ControllerViewModel(application: Application) : AndroidViewModel(applicati
             _layout = layoutRepo.getLayout("default") ?: layoutRepo.createDefaultLayout()
         }
         viewModelScope.launch {
-            transport.diagnostics.collect { d ->
-                _connectionUi.value = ControllerConnectionUi(
-                    connected = d.isConnected,
-                    statusMessage = d.statusMessage,
-                    packetsSent = d.packetsSent,
-                    updateRateHz = d.updateRateHz,
-                    estimatedRttMs = d.estimatedRttMs,
-                    transportName = d.connectionType
-                )
+            wifiTransport.diagnostics.collect { d ->
+                if (connectionManager.activeTransport.value != TransportKind.BLUETOOTH_RFCOMM) {
+                    mergeDiag(d, TransportKind.WIFI_TCP_UDP)
+                }
+            }
+        }
+        viewModelScope.launch {
+            btTransport.diagnostics.collect { d ->
+                if (connectionManager.activeTransport.value == TransportKind.BLUETOOTH_RFCOMM) {
+                    mergeDiag(d, TransportKind.BLUETOOTH_RFCOMM)
+                }
+            }
+        }
+        viewModelScope.launch {
+            btTransport.bondedDevices.collect { list ->
+                _connectionUi.value = _connectionUi.value.copy(bondedDevices = list)
             }
         }
         streamJob = viewModelScope.launch {
             inputManager.state.collect { state ->
                 if (_connectionUi.value.connected) {
-                    transport.publishState(state)
+                    connectionManager.publishState(state)
                 }
+            }
+        }
+        refreshBluetoothDevices()
+    }
+
+    private fun mergeDiag(d: com.dualphone.controller.transport.ConnectionDiagnostics, kind: TransportKind) {
+        _connectionUi.value = _connectionUi.value.copy(
+            connected = d.isConnected,
+            statusMessage = d.statusMessage,
+            packetsSent = d.packetsSent,
+            updateRateHz = d.updateRateHz,
+            estimatedRttMs = d.estimatedRttMs,
+            transportName = d.connectionType,
+            transportKind = if (d.isConnected) kind else connectionManager.activeTransport.value
+        )
+    }
+
+    fun refreshBluetoothDevices() {
+        btTransport.refreshBondedDevices()
+    }
+
+    /**
+     * Wi-Fi pairing: "IP:PORT:TOKEN"
+     * Bluetooth: "BT:ADDRESS:TOKEN"
+     */
+    fun connect(pairing: String) {
+        viewModelScope.launch {
+            _connectError.value = null
+            val trimmed = pairing.trim()
+            if (trimmed.startsWith("BT:", ignoreCase = true) || looksLikeBtAddress(trimmed)) {
+                connectBluetooth(trimmed)
+            } else {
+                connectWifi(trimmed)
             }
         }
     }
 
-    fun connect(pairing: String) {
+    private fun looksLikeBtAddress(s: String): Boolean {
+        val parts = s.split(":")
+        // MAC has 6 hex groups, or ADDRESS:TOKEN with MAC-style address
+        return parts.size >= 7 || (parts.size >= 2 && parts[0].contains("-"))
+    }
+
+    private suspend fun connectWifi(pairing: String) {
+        val result = connectionManager.connectWifi(pairing)
+        if (result.isFailure) {
+            _connectError.value = result.exceptionOrNull()?.message ?: "Wi-Fi connection failed"
+        }
+    }
+
+    private suspend fun connectBluetooth(pairing: String) {
+        val cleaned = pairing.removePrefix("BT:").removePrefix("bt:")
+        // Formats: AA:BB:CC:DD:EE:FF:TOKEN  or  AA:BB:CC:DD:EE:FF with separate token field
+        val parts = cleaned.split(":")
+        if (parts.size < 7) {
+            // ADDRESS might use dashes: AA-BB-CC-DD-EE-FF:TOKEN
+            val dashParts = cleaned.split(":")
+            if (dashParts.size == 2 && dashParts[0].count { it == '-' } == 5) {
+                val address = dashParts[0].replace('-', ':')
+                val token = dashParts[1].toIntOrNull()
+                    ?: dashParts[1].toLongOrNull(16)?.toInt()
+                if (token != null) {
+                    val r = connectionManager.connectBluetooth(address, token)
+                    if (r.isFailure) _connectError.value = r.exceptionOrNull()?.message
+                    return
+                }
+            }
+            _connectError.value = "BT format: AA:BB:CC:DD:EE:FF:TOKEN"
+            return
+        }
+        val address = parts.take(6).joinToString(":")
+        val tokenStr = parts[6]
+        val token = tokenStr.toIntOrNull()
+            ?: tokenStr.toLongOrNull(16)?.toInt()
+            ?: run {
+                _connectError.value = "Invalid BT token"
+                return
+            }
+        val r = connectionManager.connectBluetooth(address, token)
+        if (r.isFailure) {
+            _connectError.value = r.exceptionOrNull()?.message ?: "Bluetooth connection failed"
+        }
+    }
+
+    fun connectBluetoothDevice(address: String, tokenHex: String) {
         viewModelScope.launch {
             _connectError.value = null
-            val parts = pairing.trim().split(":")
-            if (parts.size < 3) {
-                _connectError.value = "Use format IP:PORT:TOKEN"
-                return@launch
-            }
-            val host = parts[0]
-            val port = parts[1].toIntOrNull() ?: TcpUdpInputTransport.DEFAULT_TCP_PORT
-            val tokenStr = parts[2]
-            val token = tokenStr.toIntOrNull()
-                ?: tokenStr.toLongOrNull(16)?.toInt()
+            val token = tokenHex.toIntOrNull()
+                ?: tokenHex.toLongOrNull(16)?.toInt()
                 ?: run {
-                    _connectError.value = "Invalid pairing token"
+                    _connectError.value = "Invalid token"
                     return@launch
                 }
-            val result = transport.connectToReceiver(host, port, token)
-            if (result.isFailure) {
-                _connectError.value = result.exceptionOrNull()?.message ?: "Connection failed"
+            val r = connectionManager.connectBluetooth(address, token)
+            if (r.isFailure) {
+                _connectError.value = r.exceptionOrNull()?.message ?: "BT failed"
             }
         }
     }
 
     fun disconnect() {
         viewModelScope.launch {
-            transport.disconnect()
+            connectionManager.disconnect()
             inputManager.releaseAll()
         }
     }

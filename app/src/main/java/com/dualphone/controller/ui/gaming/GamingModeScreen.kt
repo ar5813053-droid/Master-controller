@@ -159,25 +159,51 @@ fun GamingModeScreen(
 
         Row {
             Button(
-                onClick = { viewModel.startReceiver() },
+                onClick = { viewModel.startWifiReceiver() },
                 enabled = !ui.isListening,
                 colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
                 modifier = Modifier.weight(1f)
             ) {
                 Icon(Icons.Default.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(6.dp))
-                Text("Start Receiver")
+                Text("Wi-Fi")
             }
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Button(
+                onClick = { viewModel.startBluetoothReceiver() },
+                enabled = !ui.isListening && ui.bluetoothAvailable,
+                colors = ButtonDefaults.buttonColors(containerColor = AccentCyan),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(Icons.Default.Bluetooth, contentDescription = null, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Bluetooth")
+            }
+            Spacer(modifier = Modifier.width(8.dp))
             OutlinedButton(
                 onClick = { viewModel.stopReceiver() },
                 enabled = ui.isListening,
-                modifier = Modifier.weight(1f)
+                modifier = Modifier.weight(0.8f)
             ) {
                 Icon(Icons.Default.Stop, contentDescription = null, modifier = Modifier.size(18.dp))
-                Spacer(modifier = Modifier.width(6.dp))
+                Spacer(modifier = Modifier.width(4.dp))
                 Text("Stop")
             }
+        }
+
+        if (ui.bluetoothToken.isNotBlank() && ui.activeTransport.name.contains("BLUETOOTH")) {
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "BT pairing token: ${ui.bluetoothToken}",
+                color = AccentCyan,
+                fontFamily = FontFamily.Monospace,
+                style = MaterialTheme.typography.bodyMedium
+            )
+            Text(
+                "Controller enters: BT:MAC:TOKEN (bonded device)",
+                color = TextSecondary,
+                style = MaterialTheme.typography.bodySmall
+            )
         }
 
         if (ui.error != null) {
@@ -255,7 +281,11 @@ fun GamingModeScreen(
         OptionCard(
             icon = Icons.Default.Bluetooth,
             title = "Bluetooth RFCOMM",
-            subtitle = "Scheduled for a later milestone"
+            subtitle = if (ui.bluetoothAvailable) {
+                "Available – start Bluetooth receiver, then connect from a bonded controller device with token"
+            } else {
+                "Bluetooth disabled or unavailable on this device"
+            }
         )
 
         Spacer(modifier = Modifier.height(16.dp))
