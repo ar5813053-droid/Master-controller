@@ -3,10 +3,10 @@ package com.dualphone.controller.ui.controller
 import android.content.pm.ActivityInfo
 import android.view.KeyEvent
 import androidx.activity.ComponentActivity
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -24,7 +24,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -37,15 +36,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -60,9 +59,38 @@ import com.dualphone.controller.ui.theme.DarkSurface
 import com.dualphone.controller.ui.theme.TextPrimary
 import com.dualphone.controller.ui.theme.TextSecondary
 
-private val GlowWhite = Color(0x33FFFFFF)
-private val OutlineSoft = Color(0x55FFFFFF)
-private val FaceDark = Color(0xFF1A1A1A)
+/** Soft white glow matching the reference overlay controller. */
+private val Glow = Color(0x44FFFFFF)
+private val Outline = Color(0x66FFFFFF)
+private val Face = Color(0xFF0A0A0A)
+
+/**
+ * Exact relative layout from the supplied Sleeping Dogs / touch-overlay reference.
+ * Coordinates are fractions of the safe controller area (0–1).
+ */
+private object Ref {
+    // BACK / START
+    const val BACK_X = 0.26f; const val BACK_Y = 0.06f
+    const val START_X = 0.74f; const val START_Y = 0.06f
+    // Shoulders
+    const val LT_X = 0.12f; const val LT_Y = 0.20f
+    const val LB_X = 0.18f; const val LB_Y = 0.28f
+    const val RT_X = 0.88f; const val RT_Y = 0.20f
+    const val RB_X = 0.82f; const val RB_Y = 0.28f
+    // Stick labels
+    const val LS_X = 0.08f; const val LS_Y = 0.40f
+    const val RS_X = 0.92f; const val RS_Y = 0.40f
+    // Analog sticks
+    const val L_STICK_X = 0.14f; const val L_STICK_Y = 0.58f
+    const val R_STICK_X = 0.86f; const val R_STICK_Y = 0.42f
+    // D-pad
+    const val DPAD_X = 0.34f; const val DPAD_Y = 0.62f
+    // Face diamond
+    const val Y_X = 0.81f; const val Y_Y = 0.48f
+    const val X_X = 0.73f; const val X_Y = 0.58f
+    const val B_X = 0.89f; const val B_Y = 0.58f
+    const val A_X = 0.81f; const val A_Y = 0.68f
+}
 
 @Composable
 fun ControllerScreen(
@@ -76,15 +104,13 @@ fun ControllerScreen(
     val gamepad by viewModel.gamepadState.collectAsState()
     val connection by viewModel.connectionUi.collectAsState()
     val connectError by viewModel.connectError.collectAsState()
-    val opacity = settings.buttonOpacity
+    val opacity = settings.buttonOpacity.coerceIn(0.5f, 1f)
     var pairingInput by remember { mutableStateOf("") }
     var showConnectPanel by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         val previous = activity?.requestedOrientation
-        if (settings.landscapeMode) {
-            activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-        }
+        activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
         onDispose {
             previous?.let { activity?.requestedOrientation = it }
                 ?: run { activity?.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
@@ -93,7 +119,6 @@ fun ControllerScreen(
         }
     }
 
-    // Capture volume keys only while mapping enabled and screen active
     DisposableEffect(settings.volumeUpTarget, settings.volumeDownTarget) {
         if (viewModel.volumeMappingEnabled()) {
             main?.volumeKeyHandler = handler@{ event ->
@@ -102,13 +127,11 @@ fun ControllerScreen(
                 if (!isUp && !isDown) return@handler false
                 when (event.action) {
                     KeyEvent.ACTION_DOWN -> {
-                        if (event.repeatCount == 0) {
-                            viewModel.onVolumeKey(isVolumeUp = isUp, pressed = true)
-                        }
+                        if (event.repeatCount == 0) viewModel.onVolumeKey(isUp, true)
                         true
                     }
                     KeyEvent.ACTION_UP -> {
-                        viewModel.onVolumeKey(isVolumeUp = isUp, pressed = false)
+                        viewModel.onVolumeKey(isUp, false)
                         true
                     }
                     else -> false
@@ -121,70 +144,55 @@ fun ControllerScreen(
     }
 
     Box(
-        modifier = Modifier
+        Modifier
             .fillMaxSize()
             .background(Black)
     ) {
-        // Soft vignette
-        Canvas(Modifier.fillMaxSize()) {
-            drawRect(
-                brush = Brush.radialGradient(
-                    colors = listOf(Color(0xFF151515), Color.Black),
-                    center = Offset(size.width * 0.5f, size.height * 0.5f),
-                    radius = size.maxDimension * 0.75f
-                )
-            )
-        }
-
-        // Top bar
+        // Minimal top chrome
         Row(
-            modifier = Modifier
+            Modifier
                 .fillMaxWidth()
-                .padding(6.dp)
+                .padding(4.dp)
                 .align(Alignment.TopStart),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onBack) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = TextPrimary)
+            IconButton(onClick = onBack, modifier = Modifier.size(36.dp)) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = TextSecondary)
             }
             Text(
-                text = if (connection.connected) "LIVE" else "LOCAL",
-                style = MaterialTheme.typography.titleMedium,
-                color = if (connection.connected) AccentBlue else TextPrimary,
+                if (connection.connected) "LIVE" else "LOCAL",
+                color = if (connection.connected) AccentBlue else TextSecondary,
+                fontSize = 11.sp,
                 fontWeight = FontWeight.Bold
             )
-            Spacer(modifier = Modifier.weight(1f))
+            Spacer(Modifier.weight(1f))
             TextButton(onClick = { showConnectPanel = !showConnectPanel }) {
-                Text(if (connection.connected) "Net" else "Connect", color = AccentBlue, fontSize = 12.sp)
+                Text("Connect", color = AccentBlue, fontSize = 11.sp)
             }
-            InputPill(gamepadActive = gamepad.buttonsBitmask != 0 ||
-                gamepad.leftStickX != 0f || gamepad.leftStickY != 0f ||
-                gamepad.rightStickX != 0f || gamepad.rightStickY != 0f)
         }
 
         if (showConnectPanel) {
             Column(
-                modifier = Modifier
+                Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 48.dp, start = 12.dp, end = 12.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(DarkSurface.copy(alpha = 0.95f))
-                    .border(1.dp, OutlineSoft, RoundedCornerShape(12.dp))
+                    .padding(top = 40.dp, start = 16.dp, end = 16.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(DarkSurface.copy(alpha = 0.96f))
+                    .border(1.dp, Outline, RoundedCornerShape(10.dp))
                     .padding(12.dp)
                     .fillMaxWidth()
             ) {
                 Text(connection.statusMessage, color = TextSecondary, fontSize = 12.sp)
                 if (connection.connected) {
                     Text(
-                        "Sent ${connection.packetsSent} · ${"%.0f".format(connection.updateRateHz)} Hz",
-                        color = TextPrimary,
-                        fontSize = 11.sp
+                        "pkts ${connection.packetsSent} · ${"%.0f".format(connection.updateRateHz)} Hz",
+                        color = TextPrimary, fontSize = 11.sp
                     )
                     TextButton(onClick = { viewModel.disconnect() }) {
                         Text("Disconnect", color = AccentBlue)
                     }
                 } else {
-                    Text("Wi-Fi: IP:PORT:TOKEN  ·  BT: MAC:TOKEN", color = TextSecondary, fontSize = 11.sp)
+                    Text("IP:PORT:TOKEN  or  BT:MAC:TOKEN", color = TextSecondary, fontSize = 11.sp)
                     BasicTextField(
                         value = pairingInput,
                         onValueChange = { pairingInput = it },
@@ -194,9 +202,9 @@ fun ControllerScreen(
                         modifier = Modifier
                             .fillMaxWidth()
                             .padding(vertical = 6.dp)
-                            .clip(RoundedCornerShape(8.dp))
+                            .clip(RoundedCornerShape(6.dp))
                             .background(Black)
-                            .padding(10.dp)
+                            .padding(8.dp)
                     )
                     if (connectError != null) {
                         Text(connectError!!, color = Color(0xFFFF6B6B), fontSize = 11.sp)
@@ -213,238 +221,166 @@ fun ControllerScreen(
             }
         }
 
-        // Main gamepad layout – premium reference style
-        Box(
-            modifier = Modifier
+        // Reference-faithful layout
+        BoxWithConstraints(
+            Modifier
                 .fillMaxSize()
-                .padding(top = 40.dp, bottom = 8.dp, start = 12.dp, end = 12.dp)
+                .padding(top = 28.dp, bottom = 4.dp)
         ) {
-            // LEFT cluster: shoulders, D-pad, LS
-            Column(
-                modifier = Modifier
-                    .align(Alignment.CenterStart)
-                    .padding(start = 4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Row {
-                    GlowShoulder("LT", opacity, onDown = { viewModel.onButtonDown(ControllerButton.L2, it) }, onUp = { viewModel.onButtonUp(ControllerButton.L2, it) })
-                    Spacer(Modifier.width(10.dp))
-                    GlowShoulder("LB", opacity, onDown = { viewModel.onButtonDown(ControllerButton.L1, it) }, onUp = { viewModel.onButtonUp(ControllerButton.L1, it) })
-                }
-                Spacer(Modifier.height(10.dp))
-                DPadView(
-                    size = 108.dp,
+            val W = maxWidth
+            val H = maxHeight
+            val density = LocalDensity.current
+
+            fun px(fx: Float, fy: Float, sizeDp: Dp): Modifier {
+                val s = sizeDp
+                return Modifier
+                    .offset(
+                        x = W * fx - s / 2,
+                        y = H * fy - s / 2
+                    )
+                    .size(s)
+            }
+
+            // BACK / START
+            RefRect("BACK", ControllerButton.SELECT, px(Ref.BACK_X, Ref.BACK_Y, 56.dp), opacity, viewModel)
+            RefRect("START", ControllerButton.START, px(Ref.START_X, Ref.START_Y, 56.dp), opacity, viewModel)
+
+            // Shoulders LT LB RT RB
+            RefShoulder("LT", ControllerButton.L2, px(Ref.LT_X, Ref.LT_Y, 48.dp), -18f, opacity, viewModel)
+            RefShoulder("LB", ControllerButton.L1, px(Ref.LB_X, Ref.LB_Y, 48.dp), -12f, opacity, viewModel)
+            RefShoulder("RT", ControllerButton.R2, px(Ref.RT_X, Ref.RT_Y, 48.dp), 18f, opacity, viewModel)
+            RefShoulder("RB", ControllerButton.R1, px(Ref.RB_X, Ref.RB_Y, 48.dp), 12f, opacity, viewModel)
+
+            // LS / RS indicator dots
+            RefDot("LS", px(Ref.LS_X, Ref.LS_Y, 36.dp), opacity)
+            RefDot("RS", px(Ref.RS_X, Ref.RS_Y, 36.dp), opacity)
+
+            // Left stick
+            Box(px(Ref.L_STICK_X, Ref.L_STICK_Y, 120.dp), contentAlignment = Alignment.Center) {
+                JoystickPad(
+                    size = 120.dp,
                     opacity = opacity,
-                    onDown = viewModel::onButtonDown,
-                    onUp = viewModel::onButtonUp
-                )
-                Spacer(Modifier.height(14.dp))
-                GlowJoystick(
-                    size = 128.dp,
-                    opacity = opacity,
-                    label = "LS",
                     onDown = viewModel::onLeftStickDown,
                     onMove = viewModel::onLeftStickMove,
                     onUp = viewModel::onLeftStickUp
                 )
             }
 
-            // CENTER: Back / Home / Start
-            Row(
-                modifier = Modifier
-                    .align(Alignment.TopCenter)
-                    .padding(top = 4.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                GlowPill("BACK", opacity, onDown = { viewModel.onButtonDown(ControllerButton.SELECT, it) }, onUp = { viewModel.onButtonUp(ControllerButton.SELECT, it) })
-                Spacer(Modifier.width(14.dp))
-                GlowCircle("⌂", 36.dp, opacity, onDown = { viewModel.onButtonDown(ControllerButton.HOME, it) }, onUp = { viewModel.onButtonUp(ControllerButton.HOME, it) })
-                Spacer(Modifier.width(14.dp))
-                GlowPill("START", opacity, onDown = { viewModel.onButtonDown(ControllerButton.START, it) }, onUp = { viewModel.onButtonUp(ControllerButton.START, it) })
-            }
-
-            // RIGHT cluster: RT/RB, ABXY, RS
-            Column(
-                modifier = Modifier
-                    .align(Alignment.CenterEnd)
-                    .padding(end = 4.dp),
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                Row {
-                    GlowShoulder("RB", opacity, onDown = { viewModel.onButtonDown(ControllerButton.R1, it) }, onUp = { viewModel.onButtonUp(ControllerButton.R1, it) })
-                    Spacer(Modifier.width(10.dp))
-                    GlowShoulder("RT", opacity, onDown = { viewModel.onButtonDown(ControllerButton.R2, it) }, onUp = { viewModel.onButtonUp(ControllerButton.R2, it) })
-                }
-                Spacer(Modifier.height(8.dp))
-                Box(modifier = Modifier.size(150.dp)) {
-                    GlowFace("Y", Modifier.align(Alignment.TopCenter), opacity,
-                        onDown = { viewModel.onButtonDown(ControllerButton.Y, it) },
-                        onUp = { viewModel.onButtonUp(ControllerButton.Y, it) })
-                    GlowFace("X", Modifier.align(Alignment.CenterStart), opacity,
-                        onDown = { viewModel.onButtonDown(ControllerButton.X, it) },
-                        onUp = { viewModel.onButtonUp(ControllerButton.X, it) })
-                    GlowFace("B", Modifier.align(Alignment.CenterEnd), opacity,
-                        onDown = { viewModel.onButtonDown(ControllerButton.B, it) },
-                        onUp = { viewModel.onButtonUp(ControllerButton.B, it) })
-                    GlowFace("A", Modifier.align(Alignment.BottomCenter), opacity,
-                        onDown = { viewModel.onButtonDown(ControllerButton.A, it) },
-                        onUp = { viewModel.onButtonUp(ControllerButton.A, it) })
-                }
-                Spacer(Modifier.height(10.dp))
-                GlowJoystick(
-                    size = 128.dp,
+            // Right stick (reference places it mid-right, above ABXY cluster slightly)
+            Box(px(Ref.R_STICK_X, Ref.R_STICK_Y, 100.dp), contentAlignment = Alignment.Center) {
+                JoystickPad(
+                    size = 100.dp,
                     opacity = opacity,
-                    label = "RS",
                     onDown = viewModel::onRightStickDown,
                     onMove = viewModel::onRightStickMove,
                     onUp = viewModel::onRightStickUp
                 )
             }
+
+            // D-pad
+            Box(px(Ref.DPAD_X, Ref.DPAD_Y, 100.dp)) {
+                DPadView(
+                    size = 100.dp,
+                    opacity = opacity,
+                    onDown = viewModel::onButtonDown,
+                    onUp = viewModel::onButtonUp
+                )
+            }
+
+            // ABXY diamond
+            RefCircle("Y", ControllerButton.Y, px(Ref.Y_X, Ref.Y_Y, 48.dp), opacity, viewModel)
+            RefCircle("X", ControllerButton.X, px(Ref.X_X, Ref.X_Y, 48.dp), opacity, viewModel)
+            RefCircle("B", ControllerButton.B, px(Ref.B_X, Ref.B_Y, 48.dp), opacity, viewModel)
+            RefCircle("A", ControllerButton.A, px(Ref.A_X, Ref.A_Y, 48.dp), opacity, viewModel)
         }
     }
 }
 
 @Composable
-private fun InputPill(gamepadActive: Boolean) {
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        modifier = Modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(DarkSurface)
-            .border(1.dp, if (gamepadActive) AccentBlue else OutlineSoft, RoundedCornerShape(8.dp))
-            .padding(horizontal = 10.dp, vertical = 5.dp)
-    ) {
-        Box(
-            Modifier
-                .size(7.dp)
-                .clip(CircleShape)
-                .background(if (gamepadActive) AccentBlue else TextSecondary)
-        )
-        Spacer(Modifier.width(6.dp))
-        Text(if (gamepadActive) "Input" else "Idle", color = TextSecondary, fontSize = 11.sp)
-    }
-}
-
-@Composable
-private fun GlowJoystick(
-    size: androidx.compose.ui.unit.Dp,
-    opacity: Float,
+private fun RefRect(
     label: String,
-    onDown: (Int) -> Unit,
-    onMove: (Int, Float, Float) -> Unit,
-    onUp: (Int) -> Unit
-) {
-    Box(contentAlignment = Alignment.Center) {
-        // outer glow ring
-        Box(
-            Modifier
-                .size(size + 8.dp)
-                .border(1.5.dp, GlowWhite.copy(alpha = opacity * 0.5f), CircleShape)
-        )
-        JoystickPad(
-            size = size,
-            opacity = opacity,
-            onDown = onDown,
-            onMove = onMove,
-            onUp = onUp
-        )
-        Text(
-            label,
-            color = TextSecondary.copy(alpha = 0.5f * opacity),
-            fontSize = 10.sp,
-            modifier = Modifier.align(Alignment.BottomCenter).padding(bottom = 6.dp)
-        )
-    }
-}
-
-@Composable
-private fun GlowShoulder(
-    label: String,
-    opacity: Float,
-    onDown: (Int) -> Unit,
-    onUp: (Int) -> Unit
-) {
-    ControllerButtonView(
-        button = when (label) {
-            "LT" -> ControllerButton.L2
-            "LB" -> ControllerButton.L1
-            "RT" -> ControllerButton.R2
-            else -> ControllerButton.R1
-        },
-        label = label,
-        size = 52.dp,
-        opacity = opacity,
-        isRound = false,
-        onDown = { _, id -> onDown(id) },
-        onUp = { _, id -> onUp(id) }
-    )
-}
-
-@Composable
-private fun GlowFace(
-    label: String,
+    button: ControllerButton,
     modifier: Modifier,
     opacity: Float,
-    onDown: (Int) -> Unit,
-    onUp: (Int) -> Unit
+    vm: ControllerViewModel
 ) {
-    val btn = when (label) {
-        "A" -> ControllerButton.A
-        "B" -> ControllerButton.B
-        "X" -> ControllerButton.X
-        else -> ControllerButton.Y
-    }
-    Box(
-        modifier = modifier
-            .size(52.dp)
-            .shadow(8.dp, CircleShape, ambientColor = Color.White.copy(alpha = 0.15f), spotColor = Color.White.copy(alpha = 0.2f))
-    ) {
+    Box(modifier, contentAlignment = Alignment.Center) {
         ControllerButtonView(
-            button = btn,
+            button = button,
             label = label,
-            size = 50.dp,
+            size = 48.dp,
             opacity = opacity,
-            isRound = true,
-            onDown = { _, id -> onDown(id) },
-            onUp = { _, id -> onUp(id) }
+            isRound = false,
+            onDown = vm::onButtonDown,
+            onUp = vm::onButtonUp
         )
     }
 }
 
 @Composable
-private fun GlowPill(
+private fun RefCircle(
     label: String,
+    button: ControllerButton,
+    modifier: Modifier,
     opacity: Float,
-    onDown: (Int) -> Unit,
-    onUp: (Int) -> Unit
+    vm: ControllerViewModel
 ) {
-    val btn = if (label == "BACK") ControllerButton.SELECT else ControllerButton.START
-    ControllerButtonView(
-        button = btn,
-        label = label,
-        size = 44.dp,
-        opacity = opacity,
-        isRound = false,
-        onDown = { _, id -> onDown(id) },
-        onUp = { _, id -> onUp(id) }
-    )
+    Box(
+        modifier
+            .shadow(6.dp, CircleShape, ambientColor = Glow, spotColor = Glow)
+            .border(1.dp, Outline.copy(alpha = opacity), CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        ControllerButtonView(
+            button = button,
+            label = label,
+            size = 46.dp,
+            opacity = opacity,
+            isRound = true,
+            onDown = vm::onButtonDown,
+            onUp = vm::onButtonUp
+        )
+    }
 }
 
 @Composable
-private fun GlowCircle(
+private fun RefShoulder(
     label: String,
-    size: androidx.compose.ui.unit.Dp,
+    button: ControllerButton,
+    modifier: Modifier,
+    rotation: Float,
     opacity: Float,
-    onDown: (Int) -> Unit,
-    onUp: (Int) -> Unit
+    vm: ControllerViewModel
 ) {
-    ControllerButtonView(
-        button = ControllerButton.HOME,
-        label = label,
-        size = size,
-        opacity = opacity,
-        isRound = true,
-        onDown = { _, id -> onDown(id) },
-        onUp = { _, id -> onUp(id) }
-    )
+    Box(
+        modifier
+            .rotate(rotation)
+            .shadow(4.dp, RoundedCornerShape(10.dp), ambientColor = Glow, spotColor = Glow)
+            .clip(RoundedCornerShape(10.dp))
+            .background(Face.copy(alpha = opacity))
+            .border(1.dp, Outline.copy(alpha = opacity), RoundedCornerShape(10.dp)),
+        contentAlignment = Alignment.Center
+    ) {
+        ControllerButtonView(
+            button = button,
+            label = label,
+            size = 44.dp,
+            opacity = opacity,
+            isRound = false,
+            onDown = vm::onButtonDown,
+            onUp = vm::onButtonUp
+        )
+    }
+}
+
+@Composable
+private fun RefDot(label: String, modifier: Modifier, opacity: Float) {
+    Box(
+        modifier
+            .border(1.dp, Outline.copy(alpha = opacity * 0.7f), CircleShape)
+            .background(Face.copy(alpha = opacity * 0.6f), CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(label, color = TextSecondary.copy(alpha = opacity * 0.8f), fontSize = 10.sp)
+    }
 }

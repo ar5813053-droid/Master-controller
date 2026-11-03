@@ -170,7 +170,7 @@ class TcpUdpInputTransport(
 
     private suspend fun handleIncomingClient(socket: Socket, udpPort: Int) {
         try {
-            socket.soTimeout = 5000
+            socket.soTimeout = 8000 // auth only
             val input = DataInputStream(socket.getInputStream())
             val output = DataOutputStream(socket.getOutputStream())
 
@@ -211,16 +211,26 @@ class TcpUdpInputTransport(
                 )
             }
 
-            // Keep TCP open for disconnect signalling
+            // Keep TCP open for disconnect signalling only — never time out the session
+            socket.soTimeout = 0
             scope.launch {
+                val buf = ByteArray(64)
                 try {
-                    val buf = ByteArray(SessionAuth.AUTH_FRAME_SIZE)
-                    while (running.get() && !socket.isClosed) {
-                        val n = socket.getInputStream().read(buf)
-                        if (n <= 0) break
+                    while (running.get() && !socket.isClosed && _isConnected.value) {
+                        try {
+                            val n = socket.getInputStream().read(buf)
+                            if (n < 0) break // peer closed
+                            // ignore payload (heartbeats / future control frames)
+                        } catch (e: SocketTimeoutException) {
+                            // should not happen with soTimeout=0; ignore if set
+                        } catch (e: java.net.SocketException) {
+                            break
+                        }
                     }
                 } catch (_: Exception) {
-                } finally {
+                }
+                if (_isConnected.value) {
+                    android.util.Log.i(TAG, "TCP peer closed — ending session")
                     onDisconnect(sendRelease = true)
                 }
             }
@@ -254,7 +264,7 @@ class TcpUdpInputTransport(
             expectedPairingToken = pairingToken
             val socket = Socket()
             socket.connect(InetSocketAddress(host, tcpPort), 8000)
-            socket.soTimeout = 5000
+            socket.soTimeout = 8000 // only for auth handshake
             val output = DataOutputStream(socket.getOutputStream())
             val input = DataInputStream(socket.getInputStream())
 
@@ -276,6 +286,7 @@ class TcpUdpInputTransport(
             remoteUdpPort = response.udpPort
             remoteUdpAddress = InetAddress.getByName(host)
             clientSocket = socket
+            socket.soTimeout = 0 // persistent session — never auto-timeout
             BinaryPacketProtocol.resetSequence()
 
             udpSocket = DatagramSocket()
@@ -297,22 +308,42 @@ class TcpUdpInputTransport(
                 )
             }
 
-            // Monitor TCP for remote disconnect
+            // Monitor TCP for remote disconnect only (EOF / hard error)
             scope.launch {
+                val buf = ByteArray(64)
                 try {
-                    val buf = ByteArray(64)
-                    while (running.get() && !socket.isClosed) {
-                        val n = socket.getInputStream().read(buf)
-                        if (n <= 0) break
+                    while (running.get() && !socket.isClosed && _isConnected.value) {
+                        try {
+                            val n = socket.getInputStream().read(buf)
+                            if (n < 0) break
+                        } catch (e: SocketTimeoutException) {
+                            // ignore
+                        } catch (e: java.net.SocketException) {
+                            break
+                        }
                     }
                 } catch (_: Exception) {
-                } finally {
+                }
+                if (_isConnected.value) {
+                    android.util.Log.i(TAG, "Controller TCP closed by peer")
                     onDisconnect(sendRelease = false)
                 }
             }
 
             // Start 120 Hz sender
             sendJob = scope.launch { sendLoop() }
+            heartbeatJob = scope.launch {
+                // Lightweight TCP keepalive write every 2s so middleboxes / soTimeout never tear down
+                while (running.get() && _isConnected.value) {
+                    try {
+                        clientSocket?.getOutputStream()?.write(byteArrayOf(0))
+                        clientSocket?.getOutputStream()?.flush()
+                    } catch (_: Exception) {
+                        break
+                    }
+                    delay(2000)
+                }
+            }
             Result.success(Unit)
         } catch (e: Exception) {
             stopInternal()
@@ -367,10 +398,10 @@ class TcpUdpInputTransport(
                         }
                     }
                 } catch (e: Exception) {
-                    if (running.get()) {
-                        onDisconnect(sendRelease = true)
-                        break
-                    }
+                    android.util.Log.w(TAG, "UDP send failed: ${e.message}")
+                    // Transient network glitches must not kill the session
+                    delay(5)
+                    if (!running.get() || !_isConnected.value) break
                 }
             }
             val elapsed = (System.nanoTime() - start) / 1_000_000L
