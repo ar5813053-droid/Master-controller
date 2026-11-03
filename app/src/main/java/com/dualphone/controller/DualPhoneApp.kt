@@ -3,6 +3,8 @@ package com.dualphone.controller
 import android.app.Application
 import com.dualphone.controller.database.AppDatabase
 import com.dualphone.controller.database.LayoutRepository
+import com.dualphone.controller.hid.AccessibilityTouchMappingBackend
+import com.dualphone.controller.hid.CompositeInputBackend
 import com.dualphone.controller.hid.LiveInputTesterBackend
 import com.dualphone.controller.preferences.SettingsRepository
 import com.dualphone.controller.transport.ConnectionManager
@@ -36,10 +38,15 @@ class DualPhoneApp : Application() {
     lateinit var connectionManager: ConnectionManager
         private set
 
-    lateinit var inputBackend: LiveInputTesterBackend
+    lateinit var testerBackend: LiveInputTesterBackend
         private set
 
-    /** Back-compat alias used by existing screens. */
+    lateinit var accessibilityBackend: AccessibilityTouchMappingBackend
+        private set
+
+    lateinit var inputBackend: CompositeInputBackend
+        private set
+
     val transport: TcpUdpInputTransport get() = wifiTransport
 
     override fun onCreate() {
@@ -53,7 +60,10 @@ class DualPhoneApp : Application() {
         connectionManager = ConnectionManager(
             this, wifiTransport, bluetoothTransport, wifiDirectManager
         )
-        inputBackend = LiveInputTesterBackend()
+        testerBackend = LiveInputTesterBackend()
+        accessibilityBackend = AccessibilityTouchMappingBackend()
+        inputBackend = CompositeInputBackend(testerBackend, accessibilityBackend)
+        testerBackend.setActive(true)
 
         applicationScope.launch {
             layoutRepository.ensureDefaultExists()
@@ -63,6 +73,7 @@ class DualPhoneApp : Application() {
     override fun onTerminate() {
         try {
             connectionManager.shutdown()
+            inputBackend.releaseAll()
         } catch (_: Exception) {
         }
         super.onTerminate()

@@ -50,6 +50,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dualphone.controller.ui.theme.AccentBlue
+import com.dualphone.controller.ui.theme.ButtonFace
 import com.dualphone.controller.ui.theme.AccentCyan
 import com.dualphone.controller.ui.theme.Charcoal
 import com.dualphone.controller.ui.theme.DarkSurface
@@ -320,6 +321,49 @@ fun GamingModeScreen(
             color = TextSecondary,
             style = MaterialTheme.typography.bodyMedium
         )
+
+        Spacer(modifier = Modifier.height(20.dp))
+        Text("Game Input Backend", style = MaterialTheme.typography.titleLarge, color = TextPrimary, fontWeight = FontWeight.SemiBold)
+        Text(
+            "Tester only shows values in this app. Touch Mapping needs DualPhone enabled under system Accessibility settings, then maps sticks/buttons to on-screen touches for compatible games. Not universal HID.",
+            color = TextSecondary,
+            style = MaterialTheme.typography.bodySmall
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Row {
+            Button(
+                onClick = { viewModel.setBackendMode(com.dualphone.controller.hid.BackendMode.TESTER_ONLY) },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (ui.backendMode.name == "TESTER_ONLY") AccentBlue else ButtonFace
+                ),
+                modifier = Modifier.weight(1f)
+            ) { Text("Tester", color = TextPrimary) }
+            Spacer(modifier = Modifier.width(8.dp))
+            Button(
+                onClick = { viewModel.setBackendMode(com.dualphone.controller.hid.BackendMode.ACCESSIBILITY_TOUCH) },
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = if (ui.backendMode.name == "ACCESSIBILITY_TOUCH") AccentBlue else ButtonFace
+                ),
+                modifier = Modifier.weight(1f)
+            ) { Text("Touch Map", color = TextPrimary) }
+        }
+        Spacer(modifier = Modifier.height(6.dp))
+        Text(
+            "A11y service: ${if (ui.a11yServiceEnabled) "ENABLED" else "NOT ENABLED"}",
+            color = if (ui.a11yServiceEnabled) AccentBlue else TextSecondary,
+            style = MaterialTheme.typography.bodySmall
+        )
+        Button(
+            onClick = {
+                viewModel.refreshA11yState()
+                context.startActivity(android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS))
+            },
+            colors = ButtonDefaults.buttonColors(containerColor = ButtonFace),
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("Open Accessibility Settings", color = TextPrimary) }
+        ui.backendError?.let {
+            Text(it, color = androidx.compose.ui.graphics.Color(0xFFFF6B6B), style = MaterialTheme.typography.bodySmall)
+        }
     }
 }
 

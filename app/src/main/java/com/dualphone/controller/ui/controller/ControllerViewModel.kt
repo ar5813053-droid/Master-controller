@@ -14,6 +14,7 @@ import com.dualphone.controller.core.ControllerButton
 import com.dualphone.controller.core.TriggerTarget
 import com.dualphone.controller.core.toButtons
 import com.dualphone.controller.core.ControllerLayout
+import kotlinx.coroutines.flow.MutableStateFlow
 import com.dualphone.controller.core.GamepadState
 import com.dualphone.controller.input.GamepadInputManager
 import com.dualphone.controller.transport.TransportKind
@@ -67,9 +68,8 @@ class ControllerViewModel(application: Application) : AndroidViewModel(applicati
     private val _connectError = MutableStateFlow<String?>(null)
     val connectError: StateFlow<String?> = _connectError.asStateFlow()
 
-    private var _layout: ControllerLayout? = null
-    val layout: ControllerLayout
-        get() = _layout ?: layoutRepo.createDefaultLayout()
+    private val _layout = MutableStateFlow(layoutRepo.createDefaultLayout())
+    val layout = _layout
 
     init {
         viewModelScope.launch {
@@ -77,7 +77,12 @@ class ControllerViewModel(application: Application) : AndroidViewModel(applicati
         }
         viewModelScope.launch {
             layoutRepo.ensureDefaultExists()
-            _layout = layoutRepo.getLayout("default") ?: layoutRepo.createDefaultLayout()
+            settingsRepo.activeLayoutId.collect { id ->
+                val loaded = layoutRepo.getLayout(id ?: "default")
+                    ?: layoutRepo.getLayout("default")
+                    ?: layoutRepo.createDefaultLayout()
+                _layout.value = loaded
+            }
         }
         viewModelScope.launch {
             wifiTransport.diagnostics.collect { d ->

@@ -10,6 +10,7 @@ import com.dualphone.controller.core.GamepadState
 import com.dualphone.controller.transport.ConnectionDiagnostics
 import com.dualphone.controller.transport.TransportKind
 import com.dualphone.controller.transport.ReceiverState
+import com.dualphone.controller.hid.BackendMode
 import com.dualphone.controller.transport.wifi.TcpUdpInputTransport
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
@@ -31,7 +32,10 @@ data class GamingUiState(
     val bluetoothAvailable: Boolean = false,
     val bluetoothToken: String = "",
     val activeTransport: TransportKind = TransportKind.NONE,
-    val receiverState: ReceiverState = ReceiverState.STOPPED
+    val receiverState: ReceiverState = ReceiverState.STOPPED,
+    val backendMode: BackendMode = BackendMode.TESTER_ONLY,
+    val a11yServiceEnabled: Boolean = false,
+    val backendError: String? = null
 )
 
 class GamingViewModel(application: Application) : AndroidViewModel(application) {
@@ -47,7 +51,7 @@ class GamingViewModel(application: Application) : AndroidViewModel(application) 
 
     init {
         wifiDirect.initialize()
-        backend.setActive(true)
+        backend.tester.setActive(true)
         _uiState.value = _uiState.value.copy(
             bluetoothAvailable = btTransport.isBluetoothAvailable()
         )
@@ -98,7 +102,7 @@ class GamingViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
         viewModelScope.launch {
-            backend.latest.collect { state ->
+            backend.tester.latest.collect { state ->
                 // mirror for UI
                 if (connectionManager.activeTransport.value != TransportKind.NONE) {
                     _uiState.value = _uiState.value.copy(lastInput = state)
@@ -148,6 +152,23 @@ class GamingViewModel(application: Application) : AndroidViewModel(application) 
                 )
             }
         }
+    }
+
+    fun setBackendMode(mode: BackendMode) {
+        backend.setMode(mode)
+        _uiState.value = _uiState.value.copy(backendMode = mode)
+        backend.accessibility.refreshServiceState()
+        _uiState.value = _uiState.value.copy(
+            a11yServiceEnabled = backend.accessibility.serviceEnabled.value
+        )
+    }
+
+    fun refreshA11yState() {
+        backend.accessibility.refreshServiceState()
+        _uiState.value = _uiState.value.copy(
+            a11yServiceEnabled = backend.accessibility.serviceEnabled.value,
+            backendError = backend.accessibility.lastError.value
+        )
     }
 
     fun stopReceiver() {
