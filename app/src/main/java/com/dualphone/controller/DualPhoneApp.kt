@@ -73,7 +73,9 @@ class DualPhoneApp : Application() {
     override fun onTerminate() {
         try {
             connectionManager.shutdown()
-            inputBackend.releaseAll()
+            applicationScope.launch {
+                try { inputBackend.releaseAll() } catch (_: Exception) {}
+            }
         } catch (_: Exception) {
         }
         super.onTerminate()

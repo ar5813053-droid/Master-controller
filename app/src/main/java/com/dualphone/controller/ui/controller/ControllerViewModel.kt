@@ -22,7 +22,6 @@ import com.dualphone.controller.transport.PairingParser
 import com.dualphone.controller.transport.bluetooth.BluetoothRfcommTransport
 import com.dualphone.controller.transport.wifi.TcpUdpInputTransport
 import kotlinx.coroutines.Job
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
