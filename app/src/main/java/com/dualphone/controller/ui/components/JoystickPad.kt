@@ -4,6 +4,7 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -65,7 +66,11 @@ fun JoystickPad(
                             Offset(dx / mag * maxTravel, dy / mag * maxTravel)
                         } else Offset(dx, dy)
                         knobOffset = clamped
-                        onMove(id, (clamped.x / maxTravel).coerceIn(-1f, 1f), (clamped.y / maxTravel).coerceIn(-1f, 1f))
+                        onMove(
+                            id,
+                            (clamped.x / maxTravel).coerceIn(-1f, 1f),
+                            (clamped.y / maxTravel).coerceIn(-1f, 1f)
+                        )
                         change.consume()
                     } while (true)
                     knobOffset = Offset.Zero
@@ -75,42 +80,45 @@ fun JoystickPad(
                 }
             }
     ) {
-        Canvas(Modifier = Modifier.size(size)) {
-            // Outer glow ring
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val r = this.size.minDimension / 2f
+            val kR = r * 0.36f
             drawCircle(
                 color = SoftGlow.copy(alpha = 0.25f * opacity),
-                radius = radius * 0.98f,
+                radius = r * 0.98f,
                 style = Stroke(width = 3f)
             )
             drawCircle(
                 color = JoystickBase.copy(alpha = opacity),
-                radius = radius * 0.92f
+                radius = r * 0.92f
             )
             drawCircle(
                 color = Color.White.copy(alpha = 0.12f * opacity),
-                radius = radius * 0.92f,
+                radius = r * 0.92f,
                 style = Stroke(width = 2f)
             )
             drawCircle(
                 color = Color.White.copy(alpha = 0.08f * opacity),
-                radius = radius * 0.55f,
+                radius = r * 0.55f,
                 style = Stroke(width = 1.5f)
             )
             val knobColor = if (active) JoystickKnobActive else JoystickKnob
+            val cx = this.size.width / 2f + knobOffset.x
+            val cy = this.size.height / 2f + knobOffset.y
             drawCircle(
                 color = SoftGlow.copy(alpha = 0.2f * opacity),
-                radius = knobRadius * 1.15f,
-                center = Offset(radius + knobOffset.x, radius + knobOffset.y)
+                radius = kR * 1.15f,
+                center = Offset(cx, cy)
             )
             drawCircle(
                 color = knobColor.copy(alpha = opacity),
-                radius = knobRadius,
-                center = Offset(radius + knobOffset.x, radius + knobOffset.y)
+                radius = kR,
+                center = Offset(cx, cy)
             )
             drawCircle(
                 color = Color.White.copy(alpha = 0.15f * opacity),
-                radius = knobRadius,
-                center = Offset(radius + knobOffset.x, radius + knobOffset.y),
+                radius = kR,
+                center = Offset(cx, cy),
                 style = Stroke(width = 1.5f)
             )
         }
