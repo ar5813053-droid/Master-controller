@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">DualPhone Controller</string>
+    <string name="app_name_short">DualPhone</string>
+    <string name="controller_mode">Controller Mode</string>
+    <string name="gaming_mode">Gaming Mode</string>
+    <string name="layout_editor">Layout Editor</string>
+    <string name="settings">Settings</string>
+    <string name="device_role_none">No role selected</string>
+    <string name="device_role_controller">Controller</string>
+    <string name="device_role_receiver">Gaming Receiver</string>
+    <string name="connection_status_disconnected">Disconnected</string>
+    <string name="connection_status_connecting">Connecting…</string>
+    <string name="connection_status_connected">Connected</string>
+    <string name="haptic_feedback">Haptic Feedback</string>
+    <string name="joystick_deadzone">Joystick Deadzone</string>
+    <string name="joystick_sensitivity">Joystick Sensitivity</string>
+    <string name="button_opacity">Button Opacity</string>
+    <string name="landscape_mode">Force Landscape Controller</string>
+    <string name="reset_layout">Reset Layout to Default</string>
+    <string name="about">About</string>
+    <string name="about_text">DualPhone Controller\nMilestone 1 – Foundation &amp; UI\nPersonal-use dual-phone gamepad system.</string>
+    <string name="save_layout">Save Layout</string>
+    <string name="load_layout">Load Layout</string>
+    <string name="reset">Reset</string>
+    <string name="gaming_mode_instructions">Wireless communication (Wi-Fi Hotspot, Wi-Fi Direct, Bluetooth RFCOMM) will be implemented in a later milestone.\n\nThis screen prepares the device as a Gaming Receiver.</string>
+    <string name="input_test">Local Input Test</string>
+    <string name="left_stick">Left Stick</string>
+    <string name="right_stick">Right Stick</string>
+</resources>
