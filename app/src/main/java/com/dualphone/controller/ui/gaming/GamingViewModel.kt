@@ -9,6 +9,7 @@ import com.dualphone.controller.DualPhoneApp
 import com.dualphone.controller.core.GamepadState
 import com.dualphone.controller.transport.ConnectionDiagnostics
 import com.dualphone.controller.transport.TransportKind
+import com.dualphone.controller.transport.ReceiverState
 import com.dualphone.controller.transport.wifi.TcpUdpInputTransport
 import com.google.zxing.BarcodeFormat
 import com.google.zxing.EncodeHintType
@@ -29,7 +30,8 @@ data class GamingUiState(
     val wifiDirectStatus: String = "",
     val bluetoothAvailable: Boolean = false,
     val bluetoothToken: String = "",
-    val activeTransport: TransportKind = TransportKind.NONE
+    val activeTransport: TransportKind = TransportKind.NONE,
+    val receiverState: ReceiverState = ReceiverState.STOPPED
 )
 
 class GamingViewModel(application: Application) : AndroidViewModel(application) {
@@ -79,6 +81,13 @@ class GamingViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
         viewModelScope.launch {
+            wifiTransport.receiverState.collect { st ->
+                if (connectionManager.activeTransport.value != TransportKind.BLUETOOTH_RFCOMM) {
+                    _uiState.value = _uiState.value.copy(receiverState = st)
+                }
+            }
+        }
+        viewModelScope.launch {
             wifiDirect.available.collect { avail ->
                 _uiState.value = _uiState.value.copy(wifiDirectAvailable = avail)
             }
@@ -99,11 +108,11 @@ class GamingViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun applyDiag(diag: ConnectionDiagnostics) {
+        val listening = diag.isConnected ||
+            diag.statusMessage.contains("Listening", ignoreCase = true)
         _uiState.value = _uiState.value.copy(
             diagnostics = diag,
-            isListening = diag.statusMessage.contains("Listening", ignoreCase = true) ||
-                    diag.statusMessage.contains("listening", ignoreCase = true) ||
-                    diag.isConnected,
+            isListening = listening && _uiState.value.receiverState != ReceiverState.STOPPED,
             pairingString = buildPairingString(diag)
         )
         if (diag.localIp.isNotBlank() && diag.pairingTokenDisplay.isNotBlank()) {

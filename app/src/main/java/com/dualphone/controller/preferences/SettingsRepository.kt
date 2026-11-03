@@ -25,6 +25,8 @@ class SettingsRepository(private val context: Context) {
         val LANDSCAPE = booleanPreferencesKey("landscape_mode")
         val DEVICE_ROLE = stringPreferencesKey("device_role")
         val ACTIVE_LAYOUT_ID = stringPreferencesKey("active_layout_id")
+        val VOLUME_UP = stringPreferencesKey("volume_up_target")
+        val VOLUME_DOWN = stringPreferencesKey("volume_down_target")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { prefs ->
@@ -33,7 +35,9 @@ class SettingsRepository(private val context: Context) {
             joystickDeadzone = prefs[Keys.DEADZONE] ?: 0.12f,
             joystickSensitivity = prefs[Keys.SENSITIVITY] ?: 1.0f,
             buttonOpacity = prefs[Keys.BUTTON_OPACITY] ?: 0.85f,
-            landscapeMode = prefs[Keys.LANDSCAPE] ?: true
+            landscapeMode = prefs[Keys.LANDSCAPE] ?: true,
+            volumeUpTarget = prefs[Keys.VOLUME_UP] ?: "DISABLED",
+            volumeDownTarget = prefs[Keys.VOLUME_DOWN] ?: "DISABLED"
         )
     }
 
@@ -84,6 +88,13 @@ class SettingsRepository(private val context: Context) {
         }
     }
 
+    suspend fun updateVolumeMapping(up: String, down: String) {
+        context.dataStore.edit {
+            it[Keys.VOLUME_UP] = up
+            it[Keys.VOLUME_DOWN] = down
+        }
+    }
+
     suspend fun resetToDefaults() {
         context.dataStore.edit { prefs ->
             prefs[Keys.HAPTIC] = true
@@ -91,6 +102,8 @@ class SettingsRepository(private val context: Context) {
             prefs[Keys.SENSITIVITY] = 1.0f
             prefs[Keys.BUTTON_OPACITY] = 0.85f
             prefs[Keys.LANDSCAPE] = true
+            prefs[Keys.VOLUME_UP] = "DISABLED"
+            prefs[Keys.VOLUME_DOWN] = "DISABLED"
         }
     }
 }

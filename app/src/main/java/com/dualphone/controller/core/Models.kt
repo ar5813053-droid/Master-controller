@@ -104,7 +104,9 @@ data class AppSettings(
     val joystickDeadzone: Float = 0.12f,
     val joystickSensitivity: Float = 1.0f,
     val buttonOpacity: Float = 0.85f,
-    val landscapeMode: Boolean = true
+    val landscapeMode: Boolean = true,
+    val volumeUpTarget: String = "DISABLED",
+    val volumeDownTarget: String = "DISABLED"
 )
 
 /**

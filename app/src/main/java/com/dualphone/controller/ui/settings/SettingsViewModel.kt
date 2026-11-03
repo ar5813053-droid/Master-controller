@@ -39,4 +39,9 @@ class SettingsViewModel(application: Application) : AndroidViewModel(application
     fun resetDefaults() {
         viewModelScope.launch { settingsRepo.resetToDefaults() }
     }
+
+    fun setVolumeMapping(up: String, down: String) {
+        viewModelScope.launch { settingsRepo.updateVolumeMapping(up, down) }
+    }
 }
+

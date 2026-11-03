@@ -32,7 +32,11 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.platform.LocalContext
+import com.dualphone.controller.core.BluetoothPermissions
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -60,6 +64,14 @@ fun GamingModeScreen(
 ) {
     val ui by viewModel.uiState.collectAsState()
     val diag = ui.diagnostics
+    val context = LocalContext.current
+    val btPermissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { results ->
+        if (results.values.all { it }) {
+            viewModel.startBluetoothReceiver()
+        }
+    }
 
     Column(
         modifier = Modifier
@@ -102,7 +114,14 @@ fun GamingModeScreen(
                     )
                     Spacer(modifier = Modifier.width(8.dp))
                     Text(
-                        if (diag.isConnected) "Connected" else if (ui.isListening) "Listening" else "Stopped",
+                        when {
+                            diag.isConnected -> "Connected"
+                            ui.receiverState.name == "LISTENING" || ui.isListening -> "Listening / Waiting"
+                            ui.receiverState.name == "STARTING" -> "Starting…"
+                            ui.receiverState.name == "AUTHENTICATING" -> "Authenticating…"
+                            ui.receiverState.name == "ERROR" -> "Error"
+                            else -> "Stopped"
+                        },
                         color = TextPrimary,
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -170,7 +189,13 @@ fun GamingModeScreen(
             }
             Spacer(modifier = Modifier.width(8.dp))
             Button(
-                onClick = { viewModel.startBluetoothReceiver() },
+                onClick = {
+                    if (BluetoothPermissions.hasAll(context)) {
+                        viewModel.startBluetoothReceiver()
+                    } else {
+                        btPermissionLauncher.launch(BluetoothPermissions.requiredRuntimePermissions())
+                    }
+                },
                 enabled = !ui.isListening && ui.bluetoothAvailable,
                 colors = ButtonDefaults.buttonColors(containerColor = AccentCyan),
                 modifier = Modifier.weight(1f)

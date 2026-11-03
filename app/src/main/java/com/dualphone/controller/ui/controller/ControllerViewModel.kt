@@ -11,10 +11,13 @@ import androidx.lifecycle.viewModelScope
 import com.dualphone.controller.DualPhoneApp
 import com.dualphone.controller.core.AppSettings
 import com.dualphone.controller.core.ControllerButton
+import com.dualphone.controller.core.TriggerTarget
+import com.dualphone.controller.core.toButtons
 import com.dualphone.controller.core.ControllerLayout
 import com.dualphone.controller.core.GamepadState
 import com.dualphone.controller.input.GamepadInputManager
 import com.dualphone.controller.transport.TransportKind
+import com.dualphone.controller.transport.PairingParser
 import com.dualphone.controller.transport.bluetooth.BluetoothRfcommTransport
 import com.dualphone.controller.transport.wifi.TcpUdpInputTransport
 import kotlinx.coroutines.Job
@@ -144,41 +147,28 @@ class ControllerViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private suspend fun connectWifi(pairing: String) {
-        val result = connectionManager.connectWifi(pairing)
+        val parsed = PairingParser.parseWifi(pairing)
+        if (parsed.isFailure) {
+            _connectError.value = parsed.exceptionOrNull()?.message ?: "Invalid pairing string"
+            return
+        }
+        val p = parsed.getOrThrow()
+        // Pass canonical string so transport parser also succeeds
+        val canonical = PairingParser.formatWifiPairing(p.host, p.tcpPort, p.token)
+        val result = connectionManager.connectWifi(canonical)
         if (result.isFailure) {
             _connectError.value = result.exceptionOrNull()?.message ?: "Wi-Fi connection failed"
         }
     }
 
     private suspend fun connectBluetooth(pairing: String) {
-        val cleaned = pairing.removePrefix("BT:").removePrefix("bt:")
-        // Formats: AA:BB:CC:DD:EE:FF:TOKEN  or  AA:BB:CC:DD:EE:FF with separate token field
-        val parts = cleaned.split(":")
-        if (parts.size < 7) {
-            // ADDRESS might use dashes: AA-BB-CC-DD-EE-FF:TOKEN
-            val dashParts = cleaned.split(":")
-            if (dashParts.size == 2 && dashParts[0].count { it == '-' } == 5) {
-                val address = dashParts[0].replace('-', ':')
-                val token = dashParts[1].toIntOrNull()
-                    ?: dashParts[1].toLongOrNull(16)?.toInt()
-                if (token != null) {
-                    val r = connectionManager.connectBluetooth(address, token)
-                    if (r.isFailure) _connectError.value = r.exceptionOrNull()?.message
-                    return
-                }
-            }
-            _connectError.value = "BT format: AA:BB:CC:DD:EE:FF:TOKEN"
+        val parsed = PairingParser.parseBluetooth(pairing)
+        if (parsed.isFailure) {
+            _connectError.value = parsed.exceptionOrNull()?.message ?: "Invalid BT pairing"
             return
         }
-        val address = parts.take(6).joinToString(":")
-        val tokenStr = parts[6]
-        val token = tokenStr.toIntOrNull()
-            ?: tokenStr.toLongOrNull(16)?.toInt()
-            ?: run {
-                _connectError.value = "Invalid BT token"
-                return
-            }
-        val r = connectionManager.connectBluetooth(address, token)
+        val p = parsed.getOrThrow()
+        val r = connectionManager.connectBluetooth(p.address, p.token)
         if (r.isFailure) {
             _connectError.value = r.exceptionOrNull()?.message ?: "Bluetooth connection failed"
         }
@@ -227,6 +217,27 @@ class ControllerViewModel(application: Application) : AndroidViewModel(applicati
     fun onPointerCancelled(pointerId: Int) = inputManager.pointerCancelled(pointerId)
 
     fun releaseAll() = inputManager.releaseAll()
+
+    /** Synthetic pointer ids for hardware volume keys (never collide with touch). */
+    private val volumeUpPointer = -1001
+    private val volumeDownPointer = -1002
+
+    fun onVolumeKey(isVolumeUp: Boolean, pressed: Boolean) {
+        val targetName = if (isVolumeUp) currentSettings.volumeUpTarget else currentSettings.volumeDownTarget
+        val target = runCatching { TriggerTarget.valueOf(targetName) }.getOrDefault(TriggerTarget.DISABLED)
+        val buttons = target.toButtons()
+        if (buttons.isEmpty()) return
+        val pid = if (isVolumeUp) volumeUpPointer else volumeDownPointer
+        for (b in buttons) {
+            if (pressed) onButtonDown(b, pid) else onButtonUp(b, pid)
+        }
+    }
+
+    fun volumeMappingEnabled(): Boolean {
+        return currentSettings.volumeUpTarget != "DISABLED" ||
+            currentSettings.volumeDownTarget != "DISABLED"
+    }
+
 
     private fun vibrate() {
         val ctx = getApplication<Application>()

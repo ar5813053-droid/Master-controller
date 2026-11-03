@@ -4,6 +4,8 @@ import android.content.Context
 import android.os.Build
 import com.dualphone.controller.core.GamepadState
 import com.dualphone.controller.transport.ConnectionDiagnostics
+import com.dualphone.controller.transport.PairingParser
+import com.dualphone.controller.transport.ReceiverState
 import com.dualphone.controller.transport.InputTransport
 import com.dualphone.controller.transport.protocol.BinaryPacketProtocol
 import com.dualphone.controller.transport.protocol.SessionAuth
@@ -45,6 +47,7 @@ class TcpUdpInputTransport(
 ) : InputTransport, WiFiTransport {
 
     companion object {
+        private const val TAG = "TcpUdpTransport"
         const val DEFAULT_TCP_PORT = 17420
         const val DEFAULT_UDP_PORT = 17421
         const val TARGET_HZ = 120
@@ -58,6 +61,9 @@ class TcpUdpInputTransport(
 
     private val _diagnostics = MutableStateFlow(ConnectionDiagnostics())
     val diagnostics: StateFlow<ConnectionDiagnostics> = _diagnostics.asStateFlow()
+
+    private val _receiverState = MutableStateFlow(ReceiverState.STOPPED)
+    val receiverState: StateFlow<ReceiverState> = _receiverState.asStateFlow()
 
     private val _incomingState = MutableSharedFlow<GamepadState>(
         extraBufferCapacity = 8,
@@ -118,7 +124,9 @@ class TcpUdpInputTransport(
             }
 
             running.set(true)
+            _receiverState.value = ReceiverState.LISTENING
             val localIp = NetworkUtils.getLocalIpAddress(context) ?: "0.0.0.0"
+            android.util.Log.i(TAG, "Receiver listening on $localIp:$tcpPort (token redacted)")
             updateDiagnostics {
                 it.copy(
                     isConnected = false,
@@ -187,6 +195,8 @@ class TcpUdpInputTransport(
             remoteUdpAddress = socket.inetAddress
             // Controller will send UDP from ephemeral port; we accept from any after auth
             _isConnected.value = true
+            _receiverState.value = ReceiverState.CONNECTED
+            android.util.Log.i(TAG, "Authentication accepted, session established")
             lastSeq.set(-1)
             packetsReceived.set(0)
             lostEstimate.set(0)
@@ -223,16 +233,13 @@ class TcpUdpInputTransport(
     // --- Controller API ---
 
     override suspend fun connect(targetId: String): Result<Unit> {
-        // targetId format: "host:tcpPort:pairingToken"
-        val parts = targetId.split(":")
-        if (parts.size < 3) {
-            return Result.failure(IllegalArgumentException("Expected host:port:token"))
+        val parsed = PairingParser.parseWifi(targetId)
+        if (parsed.isFailure) {
+            return Result.failure(parsed.exceptionOrNull() ?: IllegalArgumentException("Invalid pairing string"))
         }
-        val host = parts[0]
-        val port = parts[1].toIntOrNull() ?: DEFAULT_TCP_PORT
-        val token = parts[2].toIntOrNull()
-            ?: return Result.failure(IllegalArgumentException("Invalid token"))
-        return connectToReceiver(host, port, token)
+        val p = parsed.getOrThrow()
+        android.util.Log.i(TAG, "Pairing string parsed host=${p.host} port=${p.tcpPort} token=****")
+        return connectToReceiver(p.host, p.tcpPort, p.token)
     }
 
     suspend fun connectToReceiver(
@@ -474,6 +481,7 @@ class TcpUdpInputTransport(
             sessionId = 0
             // rotate pairing token for next connection
             expectedPairingToken = SessionAuth.generatePairingToken()
+            _receiverState.value = ReceiverState.LISTENING
             updateDiagnostics {
                 it.copy(
                     pairingTokenDisplay = formatToken(expectedPairingToken),
@@ -486,6 +494,7 @@ class TcpUdpInputTransport(
     private fun stopInternal() {
         running.set(false)
         _isConnected.value = false
+        _receiverState.value = ReceiverState.STOPPED
         acceptJob?.cancel()
         receiveJob?.cancel()
         sendJob?.cancel()
@@ -518,8 +527,7 @@ class TcpUdpInputTransport(
         _diagnostics.value = transform(_diagnostics.value)
     }
 
-    private fun formatToken(token: Int): String =
-        String.format("%08X", token)
+    private fun formatToken(token: Int): String = PairingParser.formatToken(token)
 
     /** Expose current pairing token for QR / manual entry (receiver only). */
     fun currentPairingToken(): Int = expectedPairingToken

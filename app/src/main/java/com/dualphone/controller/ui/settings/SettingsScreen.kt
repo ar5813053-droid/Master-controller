@@ -151,7 +151,47 @@ fun SettingsScreen(
             Text("Restore Default Settings")
         }
 
-        Spacer(modifier = Modifier.height(32.dp))
+
+        HorizontalDivider(color = ButtonFace, modifier = Modifier.padding(vertical = 12.dp))
+
+        Text(
+            text = "Hardware Button Mapping",
+            style = MaterialTheme.typography.titleLarge,
+            color = TextPrimary,
+            fontWeight = FontWeight.SemiBold
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Volume keys map to LT/RT only while Controller Mode is open and a mapping is enabled. System volume is unchanged when disabled.",
+            color = TextSecondary,
+            style = MaterialTheme.typography.bodySmall
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text("Volume Up → ${settings.volumeUpTarget}", color = TextPrimary, style = MaterialTheme.typography.bodyMedium)
+        Text("Volume Down → ${settings.volumeDownTarget}", color = TextPrimary, style = MaterialTheme.typography.bodyMedium)
+        Spacer(modifier = Modifier.height(8.dp))
+        val presets = listOf(
+            "Separate (Up=LT, Down=RT)" to ("LT" to "RT"),
+            "Reverse (Up=RT, Down=LT)" to ("RT" to "LT"),
+            "Both on Up" to ("LT_RT" to "DISABLED"),
+            "Single LT" to ("LT" to "DISABLED"),
+            "Single RT" to ("RT" to "DISABLED"),
+            "Both keys → both triggers" to ("LT_RT" to "LT_RT"),
+            "Disabled" to ("DISABLED" to "DISABLED")
+        )
+        presets.forEach { (label, pair) ->
+            Button(
+                onClick = { viewModel.setVolumeMapping(pair.first, pair.second) },
+                colors = ButtonDefaults.buttonColors(containerColor = ButtonFace),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp)
+            ) {
+                Text(label, color = TextPrimary)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
 
         Text(
             text = "About",

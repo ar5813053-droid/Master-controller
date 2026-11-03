@@ -7,6 +7,7 @@ import android.bluetooth.BluetoothManager
 import android.bluetooth.BluetoothServerSocket
 import android.bluetooth.BluetoothSocket
 import android.content.Context
+import com.dualphone.controller.core.BluetoothPermissions
 import android.os.Build
 import com.dualphone.controller.core.GamepadState
 import com.dualphone.controller.transport.ConnectionDiagnostics
@@ -95,13 +96,21 @@ class BluetoothRfcommTransport(
     @SuppressLint("MissingPermission")
     fun refreshBondedDevices() {
         val a = adapter ?: return
+        if (!BluetoothPermissions.hasAll(context)) {
+            _bondedDevices.value = emptyList()
+            updateDiag { it.copy(statusMessage = "Bluetooth permission required") }
+            return
+        }
         try {
             val list = a.bondedDevices?.map {
-                BtDeviceInfo(it.name ?: "Unknown", it.address, true)
-            } ?: emptyList()
+                val name = try { it.name ?: "Unknown" } catch (_: SecurityException) { "Unknown" }
+                val addr = try { it.address } catch (_: SecurityException) { "" }
+                BtDeviceInfo(name, addr, true)
+            }?.filter { it.address.isNotBlank() } ?: emptyList()
             _bondedDevices.value = list
         } catch (_: SecurityException) {
             _bondedDevices.value = emptyList()
+            updateDiag { it.copy(statusMessage = "Bluetooth permission denied") }
         }
     }
 
@@ -112,6 +121,9 @@ class BluetoothRfcommTransport(
         withContext(Dispatchers.IO) {
             if (adapter == null || !adapter.isEnabled) {
                 return@withContext Result.failure(IllegalStateException("Bluetooth disabled or unavailable"))
+            }
+            if (!BluetoothPermissions.hasAll(context)) {
+                return@withContext Result.failure(IllegalStateException("Need Bluetooth permissions (CONNECT/SCAN)"))
             }
             if (running.get()) stopInternal()
             try {
@@ -230,6 +242,9 @@ class BluetoothRfcommTransport(
     ): Result<Unit> = withContext(Dispatchers.IO) {
         if (adapter == null || !adapter.isEnabled) {
             return@withContext Result.failure(IllegalStateException("Bluetooth disabled"))
+        }
+        if (!BluetoothPermissions.hasAll(context)) {
+            return@withContext Result.failure(IllegalStateException("Need Bluetooth permissions (CONNECT/SCAN)"))
         }
         if (running.get()) stopInternal()
         try {
