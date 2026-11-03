@@ -96,10 +96,10 @@ fun ControllerScreen(
     // Capture volume keys only while mapping enabled and screen active
     DisposableEffect(settings.volumeUpTarget, settings.volumeDownTarget) {
         if (viewModel.volumeMappingEnabled()) {
-            main?.volumeKeyHandler = { event ->
+            main?.volumeKeyHandler = handler@{ event ->
                 val isUp = event.keyCode == KeyEvent.KEYCODE_VOLUME_UP
                 val isDown = event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
-                if (!isUp && !isDown) return@volumeKeyHandler false
+                if (!isUp && !isDown) return@handler false
                 when (event.action) {
                     KeyEvent.ACTION_DOWN -> {
                         if (event.repeatCount == 0) {
