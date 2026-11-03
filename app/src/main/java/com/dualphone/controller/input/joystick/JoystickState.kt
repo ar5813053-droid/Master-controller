@@ -34,7 +34,7 @@ class JoystickState(
      */
     fun normalized(deadzone: Float, sensitivity: Float): Pair<Float, Float> {
         val magnitude = kotlin.math.sqrt(rawX * rawX + rawY * rawY)
-        if (magnitude < deadzone) {
+        if (magnitude < 1e-6f || magnitude < deadzone) {
             return 0f to 0f
         }
         val scale = ((magnitude - deadzone) / (1f - deadzone)).coerceIn(0f, 1f) * sensitivity
