@@ -22,22 +22,23 @@ class LayoutRepository(private val dao: LayoutDao) {
     suspend fun deleteLayout(id: String) = dao.delete(id)
 
     fun createDefaultLayout(): ControllerLayout {
-        // Classic reference — normalized 16:9 landscape (x,y = center; width/height fractions of canvas)
+        // Classic reference (normalized center x,y + width/height on 16:9 canvas)
+        // RS is bottom-right so it does not cover ABXY diamond.
         val controls = listOf(
-            ControlPosition("btn_select", 0.26f, 0.08f, 0.10f, 0.08f, 1f, ControlType.BUTTON_SELECT),
-            ControlPosition("btn_start", 0.74f, 0.08f, 0.10f, 0.08f, 1f, ControlType.BUTTON_START),
-            ControlPosition("btn_l2", 0.12f, 0.20f, 0.09f, 0.10f, 1f, ControlType.BUTTON_L2),
-            ControlPosition("btn_l1", 0.18f, 0.28f, 0.09f, 0.10f, 1f, ControlType.BUTTON_L1),
-            ControlPosition("btn_r2", 0.88f, 0.20f, 0.09f, 0.10f, 1f, ControlType.BUTTON_R2),
-            ControlPosition("btn_r1", 0.82f, 0.28f, 0.09f, 0.10f, 1f, ControlType.BUTTON_R1),
-            ControlPosition("stick_left", 0.16f, 0.58f, 0.20f, 0.32f, 1f, ControlType.LEFT_STICK),
-            ControlPosition("stick_right", 0.86f, 0.42f, 0.16f, 0.26f, 1f, ControlType.RIGHT_STICK),
-            ControlPosition("dpad", 0.34f, 0.62f, 0.16f, 0.26f, 1f, ControlType.DPAD),
-            ControlPosition("btn_y", 0.81f, 0.48f, 0.08f, 0.13f, 1f, ControlType.BUTTON_Y),
-            ControlPosition("btn_x", 0.73f, 0.58f, 0.08f, 0.13f, 1f, ControlType.BUTTON_X),
-            ControlPosition("btn_b", 0.89f, 0.58f, 0.08f, 0.13f, 1f, ControlType.BUTTON_B),
-            ControlPosition("btn_a", 0.81f, 0.68f, 0.08f, 0.13f, 1f, ControlType.BUTTON_A),
-            ControlPosition("btn_home", 0.50f, 0.12f, 0.07f, 0.08f, 1f, ControlType.BUTTON_HOME)
+            ControlPosition("btn_select", 0.28f, 0.07f, 0.09f, 0.09f, 1f, ControlType.BUTTON_SELECT),
+            ControlPosition("btn_start", 0.72f, 0.07f, 0.09f, 0.09f, 1f, ControlType.BUTTON_START),
+            ControlPosition("btn_home", 0.50f, 0.07f, 0.07f, 0.09f, 1f, ControlType.BUTTON_HOME),
+            ControlPosition("btn_l2", 0.11f, 0.20f, 0.08f, 0.11f, 1f, ControlType.BUTTON_L2),
+            ControlPosition("btn_l1", 0.17f, 0.30f, 0.08f, 0.11f, 1f, ControlType.BUTTON_L1),
+            ControlPosition("btn_r2", 0.89f, 0.20f, 0.08f, 0.11f, 1f, ControlType.BUTTON_R2),
+            ControlPosition("btn_r1", 0.83f, 0.30f, 0.08f, 0.11f, 1f, ControlType.BUTTON_R1),
+            ControlPosition("stick_left", 0.15f, 0.62f, 0.22f, 0.36f, 1f, ControlType.LEFT_STICK),
+            ControlPosition("dpad", 0.36f, 0.68f, 0.15f, 0.24f, 1f, ControlType.DPAD),
+            ControlPosition("btn_y", 0.80f, 0.48f, 0.075f, 0.12f, 1f, ControlType.BUTTON_Y),
+            ControlPosition("btn_x", 0.72f, 0.58f, 0.075f, 0.12f, 1f, ControlType.BUTTON_X),
+            ControlPosition("btn_b", 0.88f, 0.58f, 0.075f, 0.12f, 1f, ControlType.BUTTON_B),
+            ControlPosition("btn_a", 0.80f, 0.68f, 0.075f, 0.12f, 1f, ControlType.BUTTON_A),
+            ControlPosition("stick_right", 0.90f, 0.82f, 0.14f, 0.22f, 1f, ControlType.RIGHT_STICK)
         )
         return ControllerLayout(
             layoutId = "default",
@@ -49,9 +50,8 @@ class LayoutRepository(private val dao: LayoutDao) {
     }
 
     suspend fun ensureDefaultExists() {
-        if (dao.getLayoutById("default") == null) {
-            saveLayout(createDefaultLayout())
-        }
+        // Always refresh classic reference so UI matches the design after updates
+        saveLayout(createDefaultLayout())
     }
 
     fun newLayoutFromDefault(name: String = "Custom Layout"): ControllerLayout {

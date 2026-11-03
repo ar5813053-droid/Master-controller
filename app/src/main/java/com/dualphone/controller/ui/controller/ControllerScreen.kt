@@ -60,9 +60,10 @@ fun ControllerScreen(
     val connection by viewModel.connectionUi.collectAsState()
     val connectError by viewModel.connectError.collectAsState()
     val layout by viewModel.layout.collectAsState()
-    val opacity = settings.buttonOpacity.coerceIn(0.5f, 1f)
+    val opacity = settings.buttonOpacity.coerceIn(0.55f, 1f)
     var pairingInput by remember { mutableStateOf("") }
-    var showConnectPanel by remember { mutableStateOf(false) }
+    // Start open so Connect is never "missing"
+    var showConnectPanel by remember { mutableStateOf(true) }
 
     DisposableEffect(Unit) {
         val previous = activity?.requestedOrientation
@@ -100,22 +101,37 @@ fun ControllerScreen(
     }
 
     Box(Modifier.fillMaxSize().background(Black)) {
+        // Top bar — Connect always visible
         Row(
-            Modifier.fillMaxWidth().padding(4.dp).align(Alignment.TopStart),
+            Modifier
+                .fillMaxWidth()
+                .background(Color.Black.copy(alpha = 0.55f))
+                .padding(horizontal = 4.dp, vertical = 2.dp)
+                .align(Alignment.TopStart),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = onBack, modifier = Modifier.size(36.dp)) {
-                Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = TextSecondary)
+            IconButton(onClick = onBack, modifier = Modifier.size(40.dp)) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = TextPrimary)
             }
             Text(
-                if (connection.connected) "LIVE" else "LOCAL",
+                if (connection.connected) "● LIVE" else "○ LOCAL",
                 color = if (connection.connected) AccentBlue else TextSecondary,
-                fontSize = 11.sp,
+                fontSize = 12.sp,
                 fontWeight = FontWeight.Bold
             )
             Spacer(Modifier.weight(1f))
-            TextButton(onClick = { showConnectPanel = !showConnectPanel }) {
-                Text("Connect", color = AccentBlue, fontSize = 11.sp)
+            TextButton(
+                onClick = { showConnectPanel = !showConnectPanel },
+                modifier = Modifier
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(if (showConnectPanel) AccentBlue.copy(alpha = 0.25f) else DarkSurface)
+            ) {
+                Text(
+                    if (connection.connected) "Net / Disconnect" else "Connect",
+                    color = AccentBlue,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold
+                )
             }
         }
 
@@ -123,57 +139,66 @@ fun ControllerScreen(
             Column(
                 Modifier
                     .align(Alignment.TopCenter)
-                    .padding(top = 40.dp, start = 16.dp, end = 16.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(DarkSurface.copy(alpha = 0.96f))
-                    .border(1.dp, Color(0x66FFFFFF), RoundedCornerShape(10.dp))
-                    .padding(12.dp)
-                    .fillMaxWidth()
+                    .padding(top = 48.dp, start = 12.dp, end = 12.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(DarkSurface.copy(alpha = 0.97f))
+                    .border(1.dp, Color(0x66FFFFFF), RoundedCornerShape(12.dp))
+                    .padding(14.dp)
+                    .fillMaxWidth(0.92f)
             ) {
-                Text(connection.statusMessage, color = TextSecondary, fontSize = 12.sp)
+                Text(
+                    if (connection.connected) connection.statusMessage else "Wi-Fi pairing: IP:TCP_PORT:TOKEN",
+                    color = TextSecondary,
+                    fontSize = 12.sp
+                )
                 if (connection.connected) {
                     Text(
                         "pkts ${connection.packetsSent} · ${"%.0f".format(connection.updateRateHz)} Hz",
-                        color = TextPrimary, fontSize = 11.sp
+                        color = TextPrimary,
+                        fontSize = 12.sp
                     )
-                    TextButton(onClick = { viewModel.disconnect() }) {
-                        Text("Disconnect", color = AccentBlue)
+                    Row {
+                        TextButton(onClick = { viewModel.disconnect() }) {
+                            Text("Disconnect", color = AccentBlue, fontWeight = FontWeight.Bold)
+                        }
+                        TextButton(onClick = { showConnectPanel = false }) {
+                            Text("Hide", color = TextSecondary)
+                        }
                     }
                 } else {
-                    Text("IP:PORT:TOKEN  or  BT:MAC:TOKEN", color = TextSecondary, fontSize = 11.sp)
                     BasicTextField(
                         value = pairingInput,
                         onValueChange = { pairingInput = it },
                         singleLine = true,
-                        textStyle = TextStyle(color = TextPrimary, fontSize = 13.sp),
+                        textStyle = TextStyle(color = TextPrimary, fontSize = 14.sp),
                         cursorBrush = SolidColor(AccentBlue),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 6.dp)
-                            .clip(RoundedCornerShape(6.dp))
+                            .padding(vertical = 8.dp)
+                            .clip(RoundedCornerShape(8.dp))
                             .background(Black)
-                            .padding(8.dp)
+                            .border(1.dp, AccentBlue.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                            .padding(12.dp)
                     )
                     if (connectError != null) {
-                        Text(connectError!!, color = Color(0xFFFF6B6B), fontSize = 11.sp)
+                        Text(connectError!!, color = Color(0xFFFF6B6B), fontSize = 12.sp)
                     }
                     Row {
                         TextButton(onClick = { viewModel.connect(pairingInput) }) {
-                            Text("Connect", color = AccentBlue)
+                            Text("Connect", color = AccentBlue, fontWeight = FontWeight.Bold)
                         }
                         TextButton(onClick = { showConnectPanel = false }) {
-                            Text("Close", color = TextSecondary)
+                            Text("Hide panel", color = TextSecondary)
                         }
                     }
                 }
             }
         }
 
-        // 16:9 landscape canvas — same renderer as Layout Editor
         Box(
             Modifier
                 .fillMaxSize()
-                .padding(top = 32.dp, bottom = 4.dp, start = 4.dp, end = 4.dp),
+                .padding(top = 44.dp, bottom = 4.dp, start = 4.dp, end = 4.dp),
             contentAlignment = Alignment.Center
         ) {
             Box(

@@ -3,6 +3,7 @@ package com.dualphone.controller.ui.editor
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.detectDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -43,9 +44,9 @@ import com.dualphone.controller.ui.theme.AccentBlue
 import com.dualphone.controller.ui.theme.Black
 import com.dualphone.controller.ui.theme.ButtonFace
 import com.dualphone.controller.ui.theme.Charcoal
-import com.dualphone.controller.ui.theme.DarkSurface
 import com.dualphone.controller.ui.theme.TextPrimary
 import com.dualphone.controller.ui.theme.TextSecondary
+import kotlin.math.hypot
 
 @Composable
 fun LayoutEditorScreen(
@@ -75,13 +76,12 @@ fun LayoutEditorScreen(
             )
         }
         Text(
-            "Landscape 16:9 preview — same layout as Controller Mode",
+            "Landscape 16:9 — tap a control on the preview to select, then drag to move",
             color = TextSecondary,
             fontSize = 12.sp
         )
         Spacer(Modifier.height(8.dp))
 
-        // Landscape preview with fixed aspect ratio (never portrait canvas)
         Box(
             Modifier
                 .fillMaxWidth()
@@ -91,8 +91,6 @@ fun LayoutEditorScreen(
                 .border(1.dp, Color(0x44FFFFFF), RoundedCornerShape(8.dp))
         ) {
             BoxWithConstraints(Modifier.fillMaxSize()) {
-                val W = maxWidth
-                val H = maxHeight
                 ControllerCanvas(
                     layout = layout,
                     opacity = layout.opacity,
@@ -100,58 +98,45 @@ fun LayoutEditorScreen(
                     selectedId = selectedId,
                     modifier = Modifier.fillMaxSize()
                 )
-                // Drag layer for selected control
-                if (selectedId != null) {
-                    Box(
-                        Modifier
-                            .fillMaxSize()
-                            .pointerInput(selectedId, layout) {
-                                detectDragGestures { change, drag ->
-                                    change.consume()
-                                    val dx = drag.x / size.width
-                                    val dy = drag.y / size.height
-                                    viewModel.nudgeSelected(dx, dy)
-                                }
-                            }
-                    )
-                }
-                // Tap select by nearest control center
+                // Tap = select nearest; Drag = move selected
                 Box(
                     Modifier
                         .fillMaxSize()
-                        .pointerInput(layout) {
-                            // simple: no-op overlay when drag active
+                        .pointerInput(layout, selectedId) {
+                            detectTapGestures { offset ->
+                                val nx = offset.x / size.width
+                                val ny = offset.y / size.height
+                                val nearest = layout.controls.minByOrNull { c ->
+                                    hypot((c.x - nx).toDouble(), (c.y - ny).toDouble())
+                                }
+                                if (nearest != null) viewModel.select(nearest.controlId)
+                            }
+                        }
+                        .pointerInput(selectedId, layout) {
+                            detectDragGestures { change, drag ->
+                                change.consume()
+                                if (selectedId == null) {
+                                    val nx = change.position.x / size.width
+                                    val ny = change.position.y / size.height
+                                    val nearest = layout.controls.minByOrNull { c ->
+                                        hypot((c.x - nx).toDouble(), (c.y - ny).toDouble())
+                                    }
+                                    if (nearest != null) viewModel.select(nearest.controlId)
+                                }
+                                viewModel.nudgeSelected(
+                                    drag.x / size.width,
+                                    drag.y / size.height
+                                )
+                            }
                         }
                 )
             }
         }
 
         Spacer(Modifier.height(8.dp))
-        Text("Tap a control id below to select, then drag on preview to move.", color = TextSecondary, fontSize = 11.sp)
-
-        // Control list for selection
-        layout.controls.chunked(3).forEach { row ->
-            Row(Modifier.fillMaxWidth()) {
-                row.forEach { c ->
-                    Button(
-                        onClick = { viewModel.select(c.controlId) },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = if (c.controlId == selectedId) AccentBlue else ButtonFace
-                        ),
-                        modifier = Modifier
-                            .weight(1f)
-                            .padding(2.dp)
-                    ) {
-                        Text(c.controlId, color = TextPrimary, fontSize = 10.sp)
-                    }
-                }
-            }
-        }
-
         if (selected != null) {
-            Spacer(Modifier.height(8.dp))
             Text(
-                "Selected: ${selected.controlId}  x=${"%.2f".format(selected.x)} y=${"%.2f".format(selected.y)}",
+                "Selected: ${selected.controlId}  x=${"%.2f".format(selected.x)} y=${"%.2f".format(selected.y)}  w=${"%.2f".format(selected.width)}",
                 color = TextPrimary,
                 fontSize = 12.sp
             )
@@ -167,6 +152,25 @@ fun LayoutEditorScreen(
                 onValueChange = { viewModel.setSelectedOpacity(it) },
                 valueRange = 0.3f..1f
             )
+        } else {
+            Text("Tap any control on the preview to select it", color = TextSecondary, fontSize = 12.sp)
+        }
+
+        Spacer(Modifier.height(8.dp))
+        layout.controls.chunked(4).forEach { row ->
+            Row(Modifier.fillMaxWidth()) {
+                row.forEach { c ->
+                    Button(
+                        onClick = { viewModel.select(c.controlId) },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = if (c.controlId == selectedId) AccentBlue else ButtonFace
+                        ),
+                        modifier = Modifier.weight(1f).padding(2.dp)
+                    ) {
+                        Text(c.controlId.removePrefix("btn_").removePrefix("stick_"), color = TextPrimary, fontSize = 9.sp)
+                    }
+                }
+            }
         }
 
         Spacer(Modifier.height(12.dp))
@@ -175,7 +179,7 @@ fun LayoutEditorScreen(
                 onClick = { viewModel.save() },
                 colors = ButtonDefaults.buttonColors(containerColor = AccentBlue),
                 modifier = Modifier.weight(1f)
-            ) { Text("Save", color = TextPrimary) }
+            ) { Text("Save", color = TextPrimary, fontWeight = FontWeight.Bold) }
             Spacer(Modifier.width(8.dp))
             Button(
                 onClick = { viewModel.resetToDefault() },
