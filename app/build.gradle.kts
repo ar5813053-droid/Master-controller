@@ -14,8 +14,8 @@ android {
         applicationId = "com.dualphone.controller"
         minSdk = 28
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0-milestone1"
+        versionCode = 2
+        versionName = "1.0.0-milestone2"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -107,6 +107,9 @@ dependencies {
 
     // Serialization (for layout persistence)
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.7.3")
+
+    // QR code generation (encode only)
+    implementation("com.google.zxing:core:3.5.3")
 
     // Testing
     testImplementation("junit:junit:4.13.2")

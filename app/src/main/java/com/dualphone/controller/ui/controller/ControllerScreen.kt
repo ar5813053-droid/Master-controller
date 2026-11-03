@@ -15,14 +15,21 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -50,7 +57,11 @@ fun ControllerScreen(
     val activity = context as? ComponentActivity
     val settings by viewModel.settings.collectAsState()
     val gamepad by viewModel.gamepadState.collectAsState()
+    val connection by viewModel.connectionUi.collectAsState()
+    val connectError by viewModel.connectError.collectAsState()
     val opacity = settings.buttonOpacity
+    var pairingInput by remember { mutableStateOf("") }
+    var showConnectPanel by remember { mutableStateOf(false) }
 
     // Force landscape while in controller mode
     DisposableEffect(Unit) {
@@ -86,13 +97,73 @@ fun ControllerScreen(
                 )
             }
             Text(
-                text = "Controller Mode – Local Test",
+                text = if (connection.connected) "Controller – Live" else "Controller – Local",
                 style = MaterialTheme.typography.titleMedium,
                 color = TextPrimary
             )
             Spacer(modifier = Modifier.weight(1f))
-            // Live input indicator
+            TextButton(onClick = { showConnectPanel = !showConnectPanel }) {
+                Text(
+                    if (connection.connected) "Net" else "Connect",
+                    color = AccentBlue,
+                    fontSize = 12.sp
+                )
+            }
             InputTestIndicator(gamepad = gamepad)
+        }
+
+        if (showConnectPanel) {
+            Column(
+                modifier = Modifier
+                    .align(Alignment.TopCenter)
+                    .padding(top = 48.dp, start = 12.dp, end = 12.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(DarkSurface)
+                    .padding(12.dp)
+                    .fillMaxWidth()
+            ) {
+                Text(
+                    text = connection.statusMessage,
+                    color = TextSecondary,
+                    fontSize = 12.sp
+                )
+                if (connection.connected) {
+                    Text(
+                        "Sent ${connection.packetsSent}  ·  ${"%.0f".format(connection.updateRateHz)} Hz  ·  RTT ${connection.estimatedRttMs?.let { "%.0f ms".format(it) } ?: "n/a"}",
+                        color = TextPrimary,
+                        fontSize = 11.sp
+                    )
+                    TextButton(onClick = { viewModel.disconnect() }) {
+                        Text("Disconnect", color = AccentBlue)
+                    }
+                } else {
+                    Text("Pairing string (IP:PORT:TOKEN)", color = TextSecondary, fontSize = 11.sp)
+                    BasicTextField(
+                        value = pairingInput,
+                        onValueChange = { pairingInput = it },
+                        singleLine = true,
+                        textStyle = TextStyle(color = TextPrimary, fontSize = 13.sp),
+                        cursorBrush = SolidColor(AccentBlue),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 6.dp)
+                            .clip(RoundedCornerShape(8.dp))
+                            .background(Black)
+                            .padding(10.dp)
+                    )
+                    if (connectError != null) {
+                        Text(connectError!!, color = androidx.compose.ui.graphics.Color.Red, fontSize = 11.sp)
+                    }
+                    Row {
+                        TextButton(onClick = { viewModel.connect(pairingInput) }) {
+                            Text("Connect", color = AccentBlue)
+                        }
+                        TextButton(onClick = { showConnectPanel = false }) {
+                            Text("Close", color = TextSecondary)
+                        }
+                    }
+                }
+            }
         }
 
         // Main controller layout – fixed relative positions for landscape
