@@ -173,7 +173,7 @@ fun ControllerScreen(
                 )
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    if (connection.connected) connection.statusMessage else "Optional Wi-Fi diagnostic: IP:TCP_PORT:TOKEN",
+                    if (connection.connected) connection.statusMessage else "BT token (e.g. 6BF27991) after system pair · or BT:MAC:TOKEN · or Wi-Fi IP:PORT:TOKEN",
                     color = TextSecondary,
                     fontSize = 12.sp
                 )
@@ -192,6 +192,11 @@ fun ControllerScreen(
                         }
                     }
                 } else {
+                    Text(
+                        "Gaming Mode → Bluetooth → copy token here (phones must be paired in Settings first)",
+                        color = TextSecondary,
+                        fontSize = 10.sp
+                    )
                     BasicTextField(
                         value = pairingInput,
                         onValueChange = { pairingInput = it },

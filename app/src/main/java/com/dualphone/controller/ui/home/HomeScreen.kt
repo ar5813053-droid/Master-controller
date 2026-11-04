@@ -397,19 +397,38 @@ private fun ControllerConnectDialog(
         text = {
             Column {
                 Text(
-                    "Wi-Fi: IP:PORT:TOKEN
-Bluetooth: sirf token (jaise 6BF27991) — pehle Settings me dono phones pair karein
-Ya BT:AA:BB:CC:DD:EE:FF:TOKEN",
-                    
-                    color = TextSecondary,
+                    "Bluetooth RFCOMM (recommended for app-to-app)",
+                    color = AccentBlue,
+                    fontWeight = FontWeight.SemiBold,
                     style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    "1) Dono phones Settings → Bluetooth me pair karein\n" +
+                        "2) Gaming Mode me ▶ Bluetooth dabayein\n" +
+                        "3) Jo token dikhe (jaise 6BF27991) yahan paste karein\n" +
+                        "   Ya full: BT:AA:BB:CC:DD:EE:FF:TOKEN",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    "Wi-Fi (optional)",
+                    color = TextSecondary,
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    "Gaming Mode me Wi-Fi start karke IP:PORT:TOKEN paste karein",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodySmall
                 )
                 Spacer(modifier = Modifier.height(12.dp))
                 OutlinedTextField(
                     value = pairing,
                     onValueChange = { pairing = it; error = null },
                     singleLine = true,
-                    label = { Text("IP:PORT:TOKEN or BT token") },
+                    label = { Text("Token / BT:MAC:TOKEN / IP:PORT:TOKEN") },
+                    placeholder = { Text("6BF27991") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 if (error != null) {
@@ -422,7 +441,7 @@ Ya BT:AA:BB:CC:DD:EE:FF:TOKEN",
             TextButton(
                 onClick = {
                     if (pairing.isBlank()) {
-                        error = "Pairing string required"
+                        error = "Token ya pairing string likhein"
                         return@TextButton
                     }
                     val cm = app?.connectionManager
@@ -432,7 +451,6 @@ Ya BT:AA:BB:CC:DD:EE:FF:TOKEN",
                     }
                     connecting = true
                     scope.launch {
-                        // Auto: Wi-Fi IP:PORT:TOKEN  or  BT:MAC:TOKEN  or  8-char TOKEN (bonded)
                         val result = cm.connectAuto(pairing.trim())
                         connecting = false
                         if (result.isSuccess) onConnected()
