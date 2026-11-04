@@ -35,6 +35,10 @@ class LayoutEditorViewModel(application: Application) : AndroidViewModel(applica
         _selectedId.value = id
     }
 
+    fun replaceControls(controls: List<ControlPosition>) {
+        _layout.update { it.copy(controls = controls) }
+    }
+
     fun nudgeSelected(dx: Float, dy: Float) {
         val id = _selectedId.value ?: return
         _layout.update { layout ->

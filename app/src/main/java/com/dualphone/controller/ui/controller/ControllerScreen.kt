@@ -63,7 +63,7 @@ fun ControllerScreen(
     val opacity = settings.buttonOpacity.coerceIn(0.55f, 1f)
     var pairingInput by remember { mutableStateOf("") }
     // Start open so Connect is never "missing"
-    var showConnectPanel by remember { mutableStateOf(true) }
+    var showConnectPanel by remember { mutableStateOf(false) }
 
     DisposableEffect(Unit) {
         val previous = activity?.requestedOrientation

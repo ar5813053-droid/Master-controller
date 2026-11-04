@@ -1,5 +1,6 @@
 package com.dualphone.controller.ui.home
 
+import kotlinx.coroutines.launch
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -28,6 +29,9 @@ import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.WifiOff
 import androidx.compose.material3.Card
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -35,7 +39,12 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
@@ -47,6 +56,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.dualphone.controller.core.ConnectionStatus
 import com.dualphone.controller.core.DeviceRole
 import com.dualphone.controller.ui.theme.AccentBlue
+import com.dualphone.controller.ui.theme.ErrorRed
 import com.dualphone.controller.ui.theme.AccentCyan
 import com.dualphone.controller.ui.theme.Charcoal
 import com.dualphone.controller.ui.theme.DarkSurface
@@ -63,6 +73,7 @@ fun HomeScreen(
     viewModel: HomeViewModel = viewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    var showControllerConnectDialog by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier
@@ -187,7 +198,7 @@ fun HomeScreen(
             accent = AccentBlue,
             onClick = {
                 viewModel.setRole(DeviceRole.CONTROLLER)
-                onNavigateController()
+                showControllerConnectDialog = true
             }
         )
         Spacer(modifier = Modifier.height(12.dp))
@@ -259,6 +270,20 @@ private fun StatusRow(label: String, value: String) {
         )
     }
 }
+
+    if (showControllerConnectDialog) {
+        ControllerConnectDialog(
+            onDismiss = { showControllerConnectDialog = false },
+            onContinueLocal = {
+                showControllerConnectDialog = false
+                onNavigateController()
+            },
+            onConnected = {
+                showControllerConnectDialog = false
+                onNavigateController()
+            }
+        )
+    }
 
 @Composable
 private fun ModeCard(
@@ -348,4 +373,82 @@ private fun ToolCard(
             )
         }
     }
+}
+
+@Composable
+private fun ControllerConnectDialog(
+    onDismiss: () -> Unit,
+    onContinueLocal: () -> Unit,
+    onConnected: () -> Unit
+) {
+    val context = LocalContext.current
+    val app = context.applicationContext as? com.dualphone.controller.DualPhoneApp
+    var pairing by remember { mutableStateOf("") }
+    var error by remember { mutableStateOf<String?>(null) }
+    var connecting by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Text("Connect Controller", color = TextPrimary, fontWeight = FontWeight.Bold)
+        },
+        text = {
+            Column {
+                Text(
+                    "Gaming phone se pairing string (IP:PORT:TOKEN) yahan paste karein. Connect ke baad controller khulega. Ya Local mode me bina network ke open karein.",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                OutlinedTextField(
+                    value = pairing,
+                    onValueChange = { pairing = it; error = null },
+                    singleLine = true,
+                    label = { Text("IP:PORT:TOKEN") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                if (error != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(error!!, color = ErrorRed, style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    if (pairing.isBlank()) {
+                        error = "Pairing string required"
+                        return@TextButton
+                    }
+                    val cm = app?.connectionManager
+                    if (cm == null) {
+                        error = "App not ready"
+                        return@TextButton
+                    }
+                    connecting = true
+                    scope.launch {
+                        val result = cm.connectWifi(pairing.trim())
+                        connecting = false
+                        if (result.isSuccess) onConnected()
+                        else error = result.exceptionOrNull()?.message ?: "Connection failed"
+                    }
+                },
+                enabled = !connecting
+            ) {
+                Text(if (connecting) "Connecting…" else "Connect & Open", color = AccentBlue)
+            }
+        },
+        dismissButton = {
+            Column {
+                TextButton(onClick = onContinueLocal) {
+                    Text("Open Local (no network)", color = TextSecondary)
+                }
+                TextButton(onClick = onDismiss) {
+                    Text("Cancel", color = TextSecondary)
+                }
+            }
+        },
+        containerColor = DarkSurface
+    )
 }
