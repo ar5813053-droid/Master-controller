@@ -145,11 +145,9 @@ class ControllerViewModel(application: Application) : AndroidViewModel(applicati
     fun connect(pairing: String) {
         viewModelScope.launch {
             _connectError.value = null
-            val trimmed = pairing.trim()
-            if (trimmed.startsWith("BT:", ignoreCase = true) || looksLikeBtAddress(trimmed)) {
-                connectBluetooth(trimmed)
-            } else {
-                connectWifi(trimmed)
+            val result = connectionManager.connectAuto(pairing.trim())
+            if (result.isFailure) {
+                _connectError.value = result.exceptionOrNull()?.message ?: "Connection failed"
             }
         }
     }

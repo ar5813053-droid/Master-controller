@@ -22,6 +22,20 @@ object PairingParser {
         val tokenDisplay: String
     )
 
+    /** True if string looks like BT MAC+token or 8-char hex token (no IP dots). */
+    fun looksLikeBluetooth(raw: String): Boolean {
+        val t = raw.trim().replace(" ", "")
+        if (t.startsWith("BT:", ignoreCase = true)) return true
+        val parts = t.split(":")
+        if (parts.size >= 7 && parts.take(6).all { part ->
+            part.length in 1..2 && part.all { c -> c.isDigit() || c in 'a'..'f' || c in 'A'..'F' }
+        }) return true
+        if (!t.contains('.') && t.length == 8 && t.all { it.isDigit() || it in 'a'..'f' || it in 'A'..'F' }) {
+            return true
+        }
+        return false
+    }
+
     fun parseWifi(raw: String): Result<WifiPairing> {
         val cleaned = raw.trim().replace("\n", "").replace("\r", "").replace(" ", "")
         if (cleaned.isEmpty()) {

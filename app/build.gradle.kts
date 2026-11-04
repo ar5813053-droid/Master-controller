@@ -14,8 +14,8 @@ android {
         applicationId = "com.dualphone.controller"
         minSdk = 28
         targetSdk = 35
-        versionCode = 11
-        versionName = "1.0.7-hid"
+        versionCode = 12
+        versionName = "1.0.8-bt-pair"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 

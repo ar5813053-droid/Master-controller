@@ -93,6 +93,18 @@ class BluetoothRfcommTransport(
 
     fun isBluetoothAvailable(): Boolean = adapter != null && adapter.isEnabled
 
+    /** Own adapter MAC when OS still exposes it; often 02:00:00:00:00:00 on Android 6+. */
+    @Suppress("DEPRECATION")
+    fun localAdapterAddress(): String {
+        return try {
+            adapter?.address?.uppercase().orEmpty()
+        } catch (_: SecurityException) {
+            ""
+        } catch (_: Exception) {
+            ""
+        }
+    }
+
     @SuppressLint("MissingPermission")
     fun refreshBondedDevices() {
         val a = adapter ?: return

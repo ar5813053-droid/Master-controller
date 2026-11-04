@@ -217,19 +217,31 @@ fun GamingModeScreen(
             }
         }
 
-        if (ui.bluetoothToken.isNotBlank() && ui.activeTransport.name.contains("BLUETOOTH")) {
+        if (ui.bluetoothToken.isNotBlank()) {
             Spacer(modifier = Modifier.height(8.dp))
             Text(
-                "BT pairing token: ${ui.bluetoothToken}",
-                color = AccentCyan,
-                fontFamily = FontFamily.Monospace,
-                style = MaterialTheme.typography.bodyMedium
-            )
-            Text(
-                "Controller enters: BT:MAC:TOKEN (bonded device)",
+                "BT pairing string (copy to controller):",
                 color = TextSecondary,
                 style = MaterialTheme.typography.bodySmall
             )
+            Text(
+                ui.bluetoothPairingString.ifBlank { ui.bluetoothToken },
+                color = AccentCyan,
+                fontFamily = FontFamily.Monospace,
+                style = MaterialTheme.typography.titleMedium
+            )
+            Text(
+                "Controller pe ye paste karein. Sirf token (e.g. ${ui.bluetoothToken}) bhi chalega agar dono phones system Bluetooth me already paired hain.",
+                color = TextSecondary,
+                style = MaterialTheme.typography.bodySmall
+            )
+            if (ui.bluetoothLocalAddress.isNotBlank()) {
+                Text(
+                    "This phone MAC: ${ui.bluetoothLocalAddress}",
+                    color = TextSecondary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
         }
 
         if (ui.error != null) {

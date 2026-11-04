@@ -49,6 +49,55 @@ class ConnectionManager(
         return r
     }
 
+    /**
+     * Auto-detect Wi-Fi (IP:PORT:TOKEN) or Bluetooth (BT:MAC:TOKEN / MAC:TOKEN / TOKEN-only with bonded device).
+     */
+    suspend fun connectAuto(pairing: String): Result<Unit> {
+        val t = pairing.trim()
+        if (t.isEmpty()) return Result.failure(IllegalArgumentException("Empty pairing string"))
+        val looksBt = t.startsWith("BT:", ignoreCase = true) ||
+            PairingParser.looksLikeBluetooth(t)
+        return if (looksBt) {
+            val parsed = PairingParser.parseBluetooth(t)
+            if (parsed.isFailure) {
+                // Token-only: try bonded devices
+                val tokenOnly = PairingParser.parseToken(t.removePrefix("BT:").trim())
+                if (tokenOnly.isSuccess) {
+                    connectBluetoothWithTokenOnly(tokenOnly.getOrThrow())
+                } else {
+                    Result.failure(parsed.exceptionOrNull()!!)
+                }
+            } else {
+                val p = parsed.getOrThrow()
+                connectBluetooth(p.address, p.token)
+            }
+        } else {
+            connectWifi(t)
+        }
+    }
+
+    suspend fun connectBluetoothWithTokenOnly(token: Int): Result<Unit> {
+        bluetoothTransport.refreshBondedDevices()
+        val devices = bluetoothTransport.bondedDevices.value
+        if (devices.isEmpty()) {
+            return Result.failure(
+                IllegalArgumentException(
+                    "No bonded Bluetooth devices. Pair both phones in system Settings → Bluetooth first, then enter TOKEN or BT:MAC:TOKEN"
+                )
+            )
+        }
+        var last: Result<Unit> = Result.failure(IllegalStateException("No device accepted token"))
+        for (d in devices) {
+            last = connectBluetooth(d.address, token)
+            if (last.isSuccess) return last
+        }
+        return Result.failure(
+            IllegalArgumentException(
+                "Token rejected by ${devices.size} bonded device(s). Check Gaming Mode BT token matches. Last: ${last.exceptionOrNull()?.message}"
+            )
+        )
+    }
+
     suspend fun connectWifi(pairing: String): Result<Unit> {
         ensureExclusive(TransportKind.WIFI_TCP_UDP)
         val r = wifiTransport.connect(pairing)

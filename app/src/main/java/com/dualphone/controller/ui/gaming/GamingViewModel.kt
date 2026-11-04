@@ -31,6 +31,8 @@ data class GamingUiState(
     val wifiDirectStatus: String = "",
     val bluetoothAvailable: Boolean = false,
     val bluetoothToken: String = "",
+    val bluetoothPairingString: String = "",
+    val bluetoothLocalAddress: String = "",
     val activeTransport: TransportKind = TransportKind.NONE,
     val receiverState: ReceiverState = ReceiverState.STOPPED,
     val backendMode: BackendMode = BackendMode.TESTER_ONLY,
@@ -145,10 +147,20 @@ class GamingViewModel(application: Application) : AndroidViewModel(application) 
                     error = result.exceptionOrNull()?.message ?: "Failed to start Bluetooth"
                 )
             } else {
+                val token = btTransport.diagnostics.value.pairingTokenDisplay
+                val addr = btTransport.localAdapterAddress()
+                val btStr = if (addr.isNotBlank() && !addr.startsWith("02:00")) {
+                    "BT:$addr:$token"
+                } else {
+                    token // token-only; controller uses bonded devices
+                }
                 _uiState.value = _uiState.value.copy(
                     error = null,
                     isListening = true,
-                    bluetoothToken = btTransport.diagnostics.value.pairingTokenDisplay
+                    bluetoothToken = token,
+                    bluetoothLocalAddress = addr,
+                    bluetoothPairingString = btStr,
+                    pairingString = btStr
                 )
             }
         }

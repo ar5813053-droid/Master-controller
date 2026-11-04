@@ -397,7 +397,10 @@ private fun ControllerConnectDialog(
         text = {
             Column {
                 Text(
-                    "PRIMARY: Use Bluetooth HID on the controller screen (Start HID → pair from gaming phone Settings). Optional Wi-Fi diagnostic pairing string (IP:PORT:TOKEN) yahan paste karein. Connect ke baad controller khulega. Ya Local mode me bina network ke open karein.",
+                    "Wi-Fi: IP:PORT:TOKEN
+Bluetooth: sirf token (jaise 6BF27991) — pehle Settings me dono phones pair karein
+Ya BT:AA:BB:CC:DD:EE:FF:TOKEN",
+                    
                     color = TextSecondary,
                     style = MaterialTheme.typography.bodyMedium
                 )
@@ -406,7 +409,7 @@ private fun ControllerConnectDialog(
                     value = pairing,
                     onValueChange = { pairing = it; error = null },
                     singleLine = true,
-                    label = { Text("IP:PORT:TOKEN") },
+                    label = { Text("IP:PORT:TOKEN or BT token") },
                     modifier = Modifier.fillMaxWidth()
                 )
                 if (error != null) {
@@ -429,7 +432,8 @@ private fun ControllerConnectDialog(
                     }
                     connecting = true
                     scope.launch {
-                        val result = cm.connectWifi(pairing.trim())
+                        // Auto: Wi-Fi IP:PORT:TOKEN  or  BT:MAC:TOKEN  or  8-char TOKEN (bonded)
+                        val result = cm.connectAuto(pairing.trim())
                         connecting = false
                         if (result.isSuccess) onConnected()
                         else error = result.exceptionOrNull()?.message ?: "Connection failed"
