@@ -208,7 +208,7 @@ class BluetoothHidGamepadManager(private val context: Context) {
                 "DualPhone Gamepad",
                 "DualPhone Bluetooth HID Gamepad",
                 "DualPhone",
-                BluetoothHidDevice.SUBCLASS1_GAMEPAD,
+                0x08,
                 HidReportDescriptor.COMPACT_DESCRIPTOR
             )
             val inQos = BluetoothHidDeviceAppQosSettings(
