@@ -44,6 +44,7 @@ class ControllerViewModel(application: Application) : AndroidViewModel(applicati
     private val settingsRepo = app.settingsRepository
     private val layoutRepo = app.layoutRepository
     private val connectionManager = app.connectionManager
+    private val hidGamepad = app.hidGamepad
     private val wifiTransport = app.wifiTransport
     private val btTransport = app.bluetoothTransport
 
@@ -107,10 +108,19 @@ class ControllerViewModel(application: Application) : AndroidViewModel(applicati
                 if (_connectionUi.value.connected) {
                     connectionManager.publishState(state)
                 }
+                if (hidGamepad.isConnected()) {
+                    hidGamepad.sendReport(state)
+                }
             }
         }
         refreshBluetoothDevices()
     }
+
+    val hidUi = hidGamepad.uiState
+
+    fun startHidGamepad() = hidGamepad.start()
+    fun stopHidGamepad() = hidGamepad.stop()
+    fun refreshHid() = hidGamepad.refreshStatus()
 
     private fun mergeDiag(d: com.dualphone.controller.transport.ConnectionDiagnostics, kind: TransportKind) {
         _connectionUi.value = _connectionUi.value.copy(
@@ -220,7 +230,10 @@ class ControllerViewModel(application: Application) : AndroidViewModel(applicati
 
     fun onPointerCancelled(pointerId: Int) = inputManager.pointerCancelled(pointerId)
 
-    fun releaseAll() = inputManager.releaseAll()
+    fun releaseAll() {
+        inputManager.releaseAll()
+        hidGamepad.releaseAll()
+    }
 
     /** Synthetic pointer ids for hardware volume keys (never collide with touch). */
     private val volumeUpPointer = -1001

@@ -397,7 +397,7 @@ private fun ControllerConnectDialog(
         text = {
             Column {
                 Text(
-                    "Gaming phone se pairing string (IP:PORT:TOKEN) yahan paste karein. Connect ke baad controller khulega. Ya Local mode me bina network ke open karein.",
+                    "PRIMARY: Use Bluetooth HID on the controller screen (Start HID → pair from gaming phone Settings). Optional Wi-Fi diagnostic pairing string (IP:PORT:TOKEN) yahan paste karein. Connect ke baad controller khulega. Ya Local mode me bina network ke open karein.",
                     color = TextSecondary,
                     style = MaterialTheme.typography.bodyMedium
                 )

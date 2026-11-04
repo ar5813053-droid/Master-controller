@@ -60,6 +60,7 @@ fun ControllerScreen(
     val connection by viewModel.connectionUi.collectAsState()
     val connectError by viewModel.connectError.collectAsState()
     val layout by viewModel.layout.collectAsState()
+    val hid by viewModel.hidUi.collectAsState()
     val opacity = settings.buttonOpacity.coerceIn(0.55f, 1f)
     var pairingInput by remember { mutableStateOf("") }
     // Start open so Connect is never "missing"
@@ -146,8 +147,32 @@ fun ControllerScreen(
                     .padding(14.dp)
                     .fillMaxWidth(0.92f)
             ) {
+                Text("Bluetooth HID Gamepad (primary)", color = TextPrimary, fontSize = 13.sp, fontWeight = FontWeight.Bold)
                 Text(
-                    if (connection.connected) connection.statusMessage else "Wi-Fi pairing: IP:TCP_PORT:TOKEN",
+                    "Status: ${hid.status} — ${hid.message}",
+                    color = TextSecondary,
+                    fontSize = 11.sp
+                )
+                if (hid.hostName != null) {
+                    Text("Host: ${hid.hostName}", color = AccentBlue, fontSize = 11.sp)
+                }
+                Text("Reports sent: ${hid.reportsSent}", color = TextSecondary, fontSize = 11.sp)
+                Row {
+                    TextButton(onClick = { viewModel.startHidGamepad() }) {
+                        Text("Start HID", color = AccentBlue, fontWeight = FontWeight.Bold)
+                    }
+                    TextButton(onClick = { viewModel.stopHidGamepad() }) {
+                        Text("Stop HID", color = TextSecondary)
+                    }
+                }
+                Text(
+                    "1) Start HID  2) Gaming phone: Settings → Bluetooth → pair “DualPhone Gamepad”  3) Open a gamepad-compatible game",
+                    color = TextSecondary,
+                    fontSize = 10.sp
+                )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    if (connection.connected) connection.statusMessage else "Optional Wi-Fi diagnostic: IP:TCP_PORT:TOKEN",
                     color = TextSecondary,
                     fontSize = 12.sp
                 )

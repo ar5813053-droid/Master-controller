@@ -5,6 +5,7 @@ import com.dualphone.controller.database.AppDatabase
 import com.dualphone.controller.database.LayoutRepository
 import com.dualphone.controller.hid.AccessibilityTouchMappingBackend
 import com.dualphone.controller.hid.CompositeInputBackend
+import com.dualphone.controller.hid.BluetoothHidGamepadManager
 import com.dualphone.controller.hid.LiveInputTesterBackend
 import com.dualphone.controller.preferences.SettingsRepository
 import com.dualphone.controller.transport.ConnectionManager
@@ -47,6 +48,9 @@ class DualPhoneApp : Application() {
     lateinit var inputBackend: CompositeInputBackend
         private set
 
+    lateinit var hidGamepad: BluetoothHidGamepadManager
+        private set
+
     val transport: TcpUdpInputTransport get() = wifiTransport
 
     override fun onCreate() {
@@ -64,6 +68,7 @@ class DualPhoneApp : Application() {
         accessibilityBackend = AccessibilityTouchMappingBackend()
         inputBackend = CompositeInputBackend(testerBackend, accessibilityBackend)
         testerBackend.setActive(true)
+        hidGamepad = BluetoothHidGamepadManager(this)
 
         applicationScope.launch {
             layoutRepository.ensureDefaultExists()
@@ -73,6 +78,7 @@ class DualPhoneApp : Application() {
     override fun onTerminate() {
         try {
             connectionManager.shutdown()
+            try { hidGamepad.stop() } catch (_: Exception) {}
             applicationScope.launch {
                 try { inputBackend.releaseAll() } catch (_: Exception) {}
             }
