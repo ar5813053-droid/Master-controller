@@ -14,8 +14,8 @@ android {
         applicationId = "com.dualphone.controller"
         minSdk = 28
         targetSdk = 35
-        versionCode = 8
-        versionName = "1.0.5-ux"
+        versionCode = 9
+        versionName = "1.0.6-signed"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -24,9 +24,20 @@ android {
         }
     }
 
+
+    signingConfigs {
+        create("releaseDebug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("releaseDebug")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
@@ -36,6 +47,7 @@ android {
             isDebuggable = true
             applicationIdSuffix = ".debug"
             versionNameSuffix = "-debug"
+            signingConfig = signingConfigs.getByName("releaseDebug")
         }
     }
 

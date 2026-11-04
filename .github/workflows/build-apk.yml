@@ -37,13 +37,26 @@ jobs:
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --stacktrace
 
-      - name: Build debug APK
+      - name: Build signed debug APK
         run: ./gradlew assembleDebug --stacktrace
+
+      - name: Verify APK is signed
+        run: |
+          APK=$(ls app/build/outputs/apk/debug/*.apk | head -1)
+          echo "APK=$APK"
+          ls -la "$APK"
+          unzip -l "$APK" | grep -E 'META-INF/.*\.(SF|RSA|DSA|EC)' || {
+            echo "ERROR: APK is not signed"
+            unzip -l "$APK" | grep META-INF | head -30
+            exit 1
+          }
+          echo "Signature entries found:"
+          unzip -l "$APK" | grep -E 'META-INF/.*\.(SF|RSA|DSA|EC|MF)'
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: DualPhoneController-v1.0.5-UX
+          name: DualPhoneController-v1.0.6-Signed-APK
           path: app/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 30
