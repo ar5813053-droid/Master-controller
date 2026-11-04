@@ -249,6 +249,20 @@ fun HomeScreen(
             color = TextSecondary
         )
     }
+
+    if (showControllerConnectDialog) {
+        ControllerConnectDialog(
+            onDismiss = { showControllerConnectDialog = false },
+            onContinueLocal = {
+                showControllerConnectDialog = false
+                onNavigateController()
+            },
+            onConnected = {
+                showControllerConnectDialog = false
+                onNavigateController()
+            }
+        )
+    }
 }
 
 @Composable
@@ -271,19 +285,6 @@ private fun StatusRow(label: String, value: String) {
     }
 }
 
-    if (showControllerConnectDialog) {
-        ControllerConnectDialog(
-            onDismiss = { showControllerConnectDialog = false },
-            onContinueLocal = {
-                showControllerConnectDialog = false
-                onNavigateController()
-            },
-            onConnected = {
-                showControllerConnectDialog = false
-                onNavigateController()
-            }
-        )
-    }
 
 @Composable
 private fun ModeCard(
